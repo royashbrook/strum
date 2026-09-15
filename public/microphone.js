@@ -31,11 +31,11 @@ export class Microphone {
       const resonance = [];
       this.onState('listening', 'Strum gently. Let the strings ring.');
       for (const track of stream.getTracks()) track.addEventListener('ended', () => {
-        if (generation === this.generation) this.stop('Microphone disconnected. Tap listen to try again.');
+        if (generation === this.generation) this.stop('Microphone disconnected. Tap the ear to try again.');
       });
       context.addEventListener('statechange', () => {
         if (generation === this.generation && context.state !== 'running')
-          this.stop('Listening paused. Tap listen to resume.');
+          this.stop('Listening paused. Tap the ear to resume.');
       });
       this.timer = setInterval(() => {
         analyser.getFloatFrequencyData(spectrum); analyser.getFloatTimeDomainData(samples);
@@ -46,7 +46,7 @@ export class Microphone {
       if (generation !== this.generation) return;
       this.stop();
       this.onState('error', error?.name === 'NotAllowedError' ? 'Microphone access was not allowed. Enable it in browser settings, then try again.'
-        : error?.name === 'NotFoundError' ? 'No microphone found. Connect one and try again.' : 'Could not start the microphone. Tap listen to try again.');
+        : error?.name === 'NotFoundError' ? 'No microphone found. Connect one and try again.' : 'Could not start the microphone. Tap the ear to try again.');
     }
   }
   stop(message = 'Tap the ear, then strum.') {

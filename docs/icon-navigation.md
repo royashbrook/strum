@@ -23,3 +23,8 @@ The detector, continuation limits and tuning memory are unchanged by this slice.
 Existing update-consent, microphone lifecycle and offline tests remain in place;
 navigation tests cover icon names, touch targets, no double activation, live
 settings, first-note retirement, background/resume and reduced motion.
+
+Recovery prompts also name the ear. Landscape keeps the same label reservation
+as portrait, including optional numbers: every rail must end at least 8px above
+its label. The regression failed at -4px in both browser engines before removing
+the undersized landscape overrides; the stale-copy check also failed before repair.

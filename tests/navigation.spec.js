@@ -13,6 +13,16 @@ test('three named icon controls, separate settings, absolute top-right version o
       if(view==='tuner')await page.keyboard.press('Escape');
       else await page.locator('#nav-'+view).click();
       await expect(page.locator('#'+view)).toBeVisible();
+      if(view==='tuner'){
+        for(const numbers of [false,true]){
+          await page.locator('#nav-settings').click();await page.locator('#precision').setChecked(numbers);await page.keyboard.press('Escape');
+          for(const string of await page.locator('.string').all()){
+            const rail=await string.locator('.rail').boundingBox(),label=await string.locator('.note-label').boundingBox();
+            expect(label.y-(rail.y+rail.height),'note labels clear the rail end in both display modes').toBeGreaterThanOrEqual(8);
+          }
+        }
+        await page.locator('#nav-settings').click();await page.locator('#precision').uncheck();await page.keyboard.press('Escape');
+      }
       const v=await page.locator('#header-version').boundingBox();
       expect(size.width-v.x-v.width).toBeCloseTo(16,0);expect(v.y).toBeCloseTo(18,0);
       for(const id of ['listen','nav-settings','nav-about']){
