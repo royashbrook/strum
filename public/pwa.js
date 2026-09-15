@@ -28,13 +28,15 @@ export function wirePwa(beforeUpdate) {
     try {
       const receipt = await fetch('/version.json?update-probe=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
       if (!receipt.ok) throw new Error('Offline');
+      const latest = await receipt.json();
+      if (!/^[a-f0-9]{12}$/.test(latest.build)) throw new Error('Invalid version');
       await registration.update();
       if (registration.waiting && navigator.serviceWorker.controller) ready();
       else if (registration.installing) status.textContent = 'Downloading update…';
       else {
         // Another open tab may already have activated the new worker.
         const active = await activeBuild();
-        if (/^[a-f0-9]{12}$/.test(active) && active !== boot) ready();
+        if (active === latest.build && active !== boot) ready();
         else status.textContent = 'You’re up to date.';
       }
     } catch { status.textContent = 'Could not check. Your installed version still works; try again when online.'; }
@@ -62,6 +64,7 @@ export function wirePwa(beforeUpdate) {
     setInterval(check, 60_000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); });
     addEventListener('online', check);
+    addEventListener('pageshow', check);
   } else { status.textContent = 'This browser does not support offline installation.'; $('check-update').disabled = true; }
 
   const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;

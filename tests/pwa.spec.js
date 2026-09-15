@@ -42,7 +42,7 @@ async function boot(page) {
 
 test('installed shell survives network loss and all about links own 44px targets', async ({ page, context, browserName }) => {
   await boot(page);
-  await disconnect(context, browserName); await page.reload();
+  await disconnect(context, browserName); await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('.string')).toHaveCount(6);
   await page.locator('#demo').click(); await expect(page.locator('#status')).toContainText('Simulated');
   await page.locator('#nav-about').click();
@@ -73,7 +73,7 @@ test('real A-to-B worker update waits for consent and preserves settings', async
   await expect(page.locator('#update-notice')).toBeHidden();
   await expect(page.locator('#gate')).toHaveValue('-35');
   await expect(page.locator('#listen')).toHaveText('listen');
-  await disconnect(context, browserName); await page.reload();
+  await disconnect(context, browserName); await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#version')).toContainText(second);
   await expect(page.locator('#gate')).toHaveValue('-35');
 });

@@ -15,9 +15,10 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname === '/version.json' || url.searchParams.has('update-probe')) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    // Content-addressed modules cannot accidentally mix releases.
-    if (url.pathname.startsWith('/assets/')) {
-      const saved = await caches.match(request);
+    // The complete shell was cached at install, including icons and the manifest.
+    // Only navigation needs the network first; don't stall cached assets offline.
+    if (request.mode !== 'navigate') {
+      const saved = await cache.match(request);
       if (saved) return saved;
     }
     try {
