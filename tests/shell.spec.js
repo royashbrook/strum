@@ -79,7 +79,12 @@ test('native Web Audio measures a soft fundamental through a real media stream',
   await page.locator('#settings>summary').click();await expect(page.locator('#input-label')).toHaveText('below sensitivity');
   await page.locator('#gate').fill('85');await expect(page.locator('.string').nth(1).locator('.reading')).toHaveText('low');
   await expect(page.locator('.string').nth(1).locator('.reading-detail')).toHaveText('↑ 20¢');
-  await page.evaluate(()=>{generatedAudio.oscillator.frequency.value=110;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
+  await page.evaluate(()=>{const {context,oscillator}=generatedAudio;oscillator.frequency.value=110;generatedAudio.settledAt=context.currentTime+2*32768/context.sampleRate;});
+  await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
+  // Let a complete new-pitch window pass through both the generated stream and
+  // analyser before cutting it off; the first green can still overlap old audio.
+  await page.waitForFunction(()=>generatedAudio.context.currentTime>=generatedAudio.settledAt);
+  await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
   await page.evaluate(()=>{generatedAudio.gain.gain.value=0;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-held','true');
   await page.locator('#listen').click();await page.evaluate(()=>generatedAudio.context.close());
 });
