@@ -49,7 +49,7 @@ export class Microphone {
         : error?.name === 'NotFoundError' ? 'No microphone found. Connect one and try again.' : 'Could not start the microphone. Tap listen to try again.');
     }
   }
-  stop(message = 'Tap listen, then strum all six strings.') {
+  stop(message = 'Tap the ear, then strum.') {
     ++this.generation; clearInterval(this.timer); this.timer = null;
     this.source?.disconnect(); this.source = null;
     this.stream?.getTracks().forEach(t => t.stop()); this.stream = null;

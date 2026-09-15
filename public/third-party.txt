@@ -1,4 +1,4 @@
-Tabler Icons: thumb-up.svg
+Tabler Icons: thumb-up.svg, ear.svg, settings.svg, info-circle.svg, hand-finger.svg
 https://github.com/tabler/tabler-icons
 
 MIT License

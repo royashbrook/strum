@@ -6,7 +6,7 @@ import { easePitch } from './pitch-motion.js';
 let config = settings();
 try { config = settings(JSON.parse(localStorage.getItem('strum.settings.v1'))); } catch {}
 const $ = id => document.getElementById(id);
-let readings = STRINGS.map(s => ({ ...s, state:'quiet', cents:null, level:0 })), mode = 'idle', frame;
+let readings = STRINGS.map(s => ({ ...s, state:'quiet', cents:null, level:0 })), mode = 'idle', frame, activePage = 'tuner', heardNote = false;
 const tuningMemory = [];
 const motion = STRINGS.map(() => ({value:0, velocity:0}));
 const nodes = STRINGS.map(s => {
@@ -28,8 +28,19 @@ function show(next) {
   });
 }
 function resetReadings(){tuningMemory.length=0;motion.forEach(m=>{m.value=0;m.velocity=0;});show(STRINGS.map(s=>({...s,state:'quiet',cents:null,level:0})));}
-function state(next,message){mode=next;$('status').textContent=message;$('listen').textContent=next==='requesting'?'cancel':next==='listening'?'stop listening':'listen';$('input-signal').hidden=next!=='listening';if(next!=='listening')resetReadings();}
+function cue(){ $('strum-cue').hidden=heardNote||activePage!=='tuner'||document.hidden||!['idle','listening'].includes(mode); }
+function state(next,message){
+  mode=next;
+  const label=next==='requesting'?'cancel':next==='listening'?'stop listening':'listen';
+  $('listen-label').textContent=label;$('listen').setAttribute('aria-label',label);$('listen').title=label;
+  $('listen').setAttribute('aria-pressed',String(next==='listening'));
+  $('listen').dataset.mode=next;
+  $('status').textContent=next==='listening'&&heardNote?'Let it ring.':message;
+  $('settings-status').textContent=message;$('settings-status').hidden=next==='listening';
+  $('input-signal').hidden=next!=='listening';if(next!=='listening')resetReadings();cue();
+}
 const mic=new Microphone((next,volume,capture)=>{
+  if(!heardNote&&next.some(s=>['flat','sharp','tuned'].includes(s.state))){heardNote=true;$('status').textContent='Let it ring.';cue();}
   show(rememberTuning(next,tuningMemory));
   $('input-level').value=Math.max(-100,volume);
   $('input-label').textContent=volume<=-100?'no sound yet':next.some(s=>s.tracking)?'following a fading note':volume<config.gate?'below sensitivity':'hearing sound';
@@ -37,10 +48,24 @@ const mic=new Microphone((next,volume,capture)=>{
   const flag=value=>value===true?'on':value===false?'off':'not reported';
   $('mic-details').textContent=`${capture.sampleRate} Hz · ${capture.channelCount??'?'} channel(s). Noise reduction: ${flag(capture.noiseSuppression)}. Echo cancellation: ${flag(capture.echoCancellation)}. Automatic gain: ${flag(capture.autoGainControl)}.`;
 },state,()=>config);
-$('listen').onclick=()=>{if(mode==='listening'||mode==='requesting')mic.stop();else void mic.start();};
+$('listen').onclick=()=>{navigate('tuner');if(mode==='listening'||mode==='requesting')mic.stop();else void mic.start();};
 function silence(){mic.stop();}
 wirePwa(silence);
-for(const page of ['tuner','about']) $('nav-'+page).onclick=()=>{silence();for(const id of ['tuner','about']){$(id).hidden=id!==page;$('nav-'+id).hidden=id===page;}$('install-coach').hidden=true;$(page==='about'?'about-title':'listen').focus();};
+function navigate(page){
+  activePage=page;
+  if(page==='about'||(page==='settings'&&mode==='requesting'))silence();
+  for(const id of ['tuner','settings','about'])$(id).hidden=id!==page;
+  for(const id of ['settings','about']){
+    const button=$('nav-'+id),open=id===page;
+    button.setAttribute('aria-expanded',String(open));button.toggleAttribute('data-current',open);
+    button.setAttribute('aria-label',open?'Back to tuner':id==='settings'?'Listening settings':'About');
+    button.title=button.getAttribute('aria-label');
+  }
+  $('listen').toggleAttribute('data-current',page==='tuner');$('install-coach').hidden=true;
+  $(page==='tuner'?'listen':page+'-title').focus();cue();
+}
+for(const page of ['settings','about'])$('nav-'+page).onclick=()=>navigate(activePage===page?'tuner':page);
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&activePage!=='tuner')navigate('tuner');});
 $('install-shortcut').onclick=()=>{$('nav-about').click();$('install').click();};
 function save(){try{localStorage.setItem('strum.settings.v1',JSON.stringify(config));}catch{}}
 $('gate').oninput=()=>{config=settings({...config,gate:-Number($('gate').value)});labels();save();};
@@ -74,8 +99,8 @@ function draw(time){
   });
   frame=requestAnimationFrame(draw);
 }
-function redraw(){cancelAnimationFrame(frame);previousTime=0;if(!document.hidden)frame=requestAnimationFrame(draw);}
+function redraw(){cancelAnimationFrame(frame);previousTime=0;cue();if(!document.hidden)frame=requestAnimationFrame(draw);}
 document.addEventListener('visibilitychange',()=>{if(document.hidden){silence();cancelAnimationFrame(frame);}else redraw();});
 addEventListener('pagehide',()=>{silence();cancelAnimationFrame(frame);});
 addEventListener('pageshow',redraw);
-frame=requestAnimationFrame(draw);
+cue();$('listen').setAttribute('data-current','');frame=requestAnimationFrame(draw);

@@ -18,7 +18,7 @@ test('release contains a complete versioned module graph, stable install identit
       assert.ok(sw.includes(`/assets/${id}/${name}`));
       assert.ok((await readFile(resolve(destination, 'assets', id, name))).length);
     }
-    for (const name of ['thumb-up.svg', 'third-party.txt']) {
+    for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'third-party.txt']) {
       assert.ok(sw.includes('/' + name));
       assert.ok((await readFile(resolve(destination, name))).length);
     }

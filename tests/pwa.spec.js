@@ -57,7 +57,7 @@ test('installed shell survives network loss and all about links own 44px targets
 test('real A-to-B worker update waits for consent and preserves settings', async ({ page, context, browserName }) => {
   await fakeMic(page);
   await boot(page);
-  await page.locator('#settings>summary').click(); await page.locator('#gate').fill('35'); await page.locator('#settings>summary').click();
+  await page.locator('#nav-settings').click(); await page.locator('#gate').fill('35'); await page.locator('#nav-settings').click();
   await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
   await page.evaluate(() => { window.sameSession = true; });
   root = 'b';
@@ -70,7 +70,7 @@ test('real A-to-B worker update waits for consent and preserves settings', async
   await page.locator('#later-update').click(); await expect(page.locator('#update-notice')).toBeHidden();
   await page.locator('#nav-about').click(); await page.locator('#check-update').click(); await expect(page.locator('#update-notice')).toBeVisible();
   const button = await page.locator('#apply-update').boundingBox(); expect(button.height).toBeGreaterThanOrEqual(44);
-  await page.locator('#nav-tuner').click();await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
+  await page.locator('#nav-about').click();await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
   await page.locator('#apply-update').click();
   await expect(page.locator('#version')).toContainText(second, { timeout: 15000 });
   await expect(page.locator('#update-notice')).toBeHidden();
