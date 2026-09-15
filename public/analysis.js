@@ -66,7 +66,8 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
     // A microphone can lose the lower fundamental while leaving its overtones.
     // Two other partials must support that lower string before calling this
     // ambiguous; a genuine quiet B/high E alone must remain readable.
-    const missingLower = STRINGS.slice(0, i).some(lower => {
+    const missingLower = STRINGS.slice(0, i).some((lower, j) => {
+      if (!['quiet', 'uncertain'].includes(output[j].state)) return false;
       const harmonic = Math.round(best.hz / lower.hz), implied = best.hz / harmonic;
       if (harmonic < 2 || harmonic > 5 || Math.abs(1200 * Math.log2(implied / lower.hz)) >= 80) return false;
       let support = 0;

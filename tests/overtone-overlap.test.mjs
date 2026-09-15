@@ -21,4 +21,10 @@ for (const rate of [44100, 48000]) {
       assert.ok(Math.abs(result.cents - cents) < 2);
     }
   });
+  test(`${rate}: a detected detuned low E does not hide a separately sharp B`, () => {
+    const frame = filteredPluck({rate, notes:[-12,6,0,-20,9,3].map((c,i)=>[i,c]), poles:0, seed:200});
+    const result=analyseSpectrum(frame.spectrum,rate,frame.rms);
+    assert.equal(result[0].state,'flat');
+    assert.equal(result[4].state,'sharp');
+  });
 }

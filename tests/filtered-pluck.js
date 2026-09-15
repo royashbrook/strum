@@ -3,10 +3,10 @@ import { sampleFixture } from './waveform.js';
 
 // A decaying pluck followed by cascaded first-order high-pass filters. This is
 // a stress model, not a measurement of any particular phone microphone.
-export function filteredPluck({ rate = 48000, string = 0, cents = 0, seed = 700, cutoff = 300, poles = 6 } = {}) {
+export function filteredPluck({ rate = 48000, string = 0, cents = 0, notes = [[string, cents]], seed = 700, cutoff = 300, poles = 6 } = {}) {
   const samples = new Float32Array(FFT_SIZE + Math.round(rate * .05));
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
-  for (let h = 1; h <= 12; h++) {
+  for (const [string, cents] of notes) for (let h = 1; h <= 12; h++) {
     const hz = STRINGS[string].hz * 2 ** (cents / 1200) * h * Math.sqrt(1 + .0001 * h * h);
     const phase = random() * 2 * Math.PI;
     for (let i = 0; i < samples.length; i++) {

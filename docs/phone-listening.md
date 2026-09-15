@@ -18,6 +18,8 @@ A synthesized low-E pluck filtered through six 300 Hz high-pass stages exposed a
 
 The regression sweeps 44.1/48 kHz, ten seeds, three detunings and four filter settings. Genuine filtered B/high E and the existing quiet overtone-light decays are controls. An actual app test verifies no ghost-green latch, followed by acquisition and fade memory for a real quiet B. Alternating tuned/quiet or tuned/uncertain readings now explicitly test that only consecutive frames can latch green.
 
+The inferred-lower check runs only when that lower string is quiet or uncertain; already-detected strings use their measured frequencies in the original overlap guard. The first candidate incorrectly hid a genuinely sharp B in a detuned six-string strum. A failing mixed-detuning fixture at both sample rates caught that overreach before release and now pins the distinction.
+
 Humming still qualifies as pitch evidence in the isolated path. Requiring decay is only a hypothesis and is not shipped: it needs attack/sustain controls before risking the quiet-string improvement. Real recordings, voice/hum discrimination and final accuracy acceptance remain on #1.
 
 The release check pins `_headers` exclusion from the worker precache. HTML and worker entry points request no-store, and the manifest explicitly allows either orientation without changing app identity. CSP is unchanged; the blocked injected analytics beacon still needs a host-level decision.
