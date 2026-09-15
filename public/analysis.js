@@ -21,21 +21,25 @@ const empty = () => STRINGS.map(s => ({ ...s, state: 'quiet', cents: null, confi
 export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
   const config = settings(options), output = empty();
   if (!(sampleRate > 0) || !Number.isFinite(rmsDb) || rmsDb < config.gate || db.length < 1024) return output;
-  const binHz = sampleRate / (db.length * 2), peaks = [];
+  const binHz = sampleRate / (db.length * 2), peaks = [], rawPeaks = [];
   for (let i = 2; i < db.length - 2 && i * binHz < 2200; i++) {
-    if (!Number.isFinite(db[i]) || db[i] < -100 || db[i] <= db[i - 1] || db[i] <= db[i + 1]) continue;
+    if (!Number.isFinite(db[i]) || db[i] <= db[i - 1] || db[i] <= db[i + 1]) continue;
     const denominator = db[i - 1] - 2 * db[i] + db[i + 1];
     const offset = Number.isFinite(denominator) && denominator < 0
       ? clamp((db[i - 1] - db[i + 1]) / (2 * denominator), -0.5, 0.5) : 0;
+    const peak = { hz: (i + offset) * binHz, db: db[i] };
+    rawPeaks.push(peak);
     // Measure above the nearby noise, excluding the FFT window's main lobe.
     // Counting arbitrary bumps as harmonics made broadband noise look like strings.
+    // Absolute FFT magnitudes vary with the window and input level: a -100 dB
+    // cutoff discarded faint periodic notes even when they cleared this noise test.
     const neighbours = [];
     for (let d = -12; d <= 12; d++) if (Math.abs(d) >= 4 && i + d >= 0 && i + d < db.length)
       neighbours.push(Number.isFinite(db[i + d]) ? db[i + d] : -120);
     neighbours.sort((a, b) => a - b);
     const prominence = db[i] - neighbours[Math.floor(neighbours.length / 2)];
     if (prominence < 10 + config.rejection * 10) continue;
-    peaks.push({ hz: (i + offset) * binHz, db: db[i], prominence });
+    peaks.push({ ...peak, prominence });
   }
   if (!peaks.length) return output;
   const loudest = Math.max(...peaks.map(p => p.db));
@@ -53,8 +57,10 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
       }
       // A clear, isolated fundamental is useful after its overtones fade, notably
       // on nylon strings. Require it to dominate unrelated tones, not many overtones.
-      const isolated = fundamental.db >= loudest - 3 && !peaks.some(p => {
-        if (p.db < fundamental.db - 12 || Math.abs(p.hz - fundamental.hz) < binHz * 3) return false;
+      // Judge isolation against ALL spectral peaks: filtering the competing
+      // noise peaks first made a lone lucky noise peak look like a pure note.
+      const isolated = fundamental.db >= loudest - 3 && !rawPeaks.some(p => {
+        if (p.db < fundamental.db - 6 || Math.abs(p.hz - fundamental.hz) < binHz * 3) return false;
         const h = Math.round(p.hz / fundamental.hz);
         return h < 2 || h > 6 || Math.abs(p.hz - h * fundamental.hz) > binHz * 2;
       });

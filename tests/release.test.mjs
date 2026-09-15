@@ -22,11 +22,11 @@ test('release contains a complete versioned module graph, stable install identit
     assert.ok(!/BUILD_ID|APP_VERSION|PRECACHE_ASSETS/.test(html + sw));
     assert.ok(html.includes(`/assets/${id}/app.js`));
     assert.ok(html.includes(`/assets/${id}/app.css`));
-    for (const name of ['app.js', 'pwa.js', 'analysis.js', 'microphone.js', 'tuning-memory.js', 'resonance.js', 'pitch-motion.js', 'app.css']) {
+    for (const name of ['app.js', 'pwa.js', 'analysis.js', 'microphone.js', 'tuning-memory.js', 'resonance.js', 'pitch-motion.js', 'listening.js', 'gestures.js', 'app.css']) {
       assert.ok(sw.includes(`/assets/${id}/${name}`));
       assert.ok((await readFile(resolve(destination, 'assets', id, name))).length);
     }
-    for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'third-party.txt']) {
+    for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'guitar.svg', 'third-party.txt']) {
       assert.ok(sw.includes('/' + name));
       assert.ok((await readFile(resolve(destination, name))).length);
     }

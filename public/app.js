@@ -3,8 +3,11 @@ import { Microphone } from './microphone.js';
 import { wirePwa } from './pwa.js';
 import { rememberTuning } from './tuning-memory.js';
 import { easePitch } from './pitch-motion.js';
-let config = settings();
-try { config = settings(JSON.parse(localStorage.getItem('strum.settings.v1'))); } catch {}
+import { listeningProfiles, listeningProfile } from './listening.js';
+import { containTaps } from './gestures.js';
+let profile = 'quiet';
+try { profile = listeningProfile(localStorage.getItem('strum.listening.v2'), JSON.parse(localStorage.getItem('strum.settings.v1'))); } catch {}
+let config = settings(listeningProfiles[profile]);
 const $ = id => document.getElementById(id);
 let readings = STRINGS.map(s => ({ ...s, state:'quiet', cents:null, level:0 })), mode = 'idle', frame, activePage = 'tuner', heardNote = false;
 const tuningMemory = [];
@@ -28,14 +31,23 @@ function show(next) {
   });
 }
 function resetReadings(){tuningMemory.length=0;motion.forEach(m=>{m.value=0;m.velocity=0;});show(STRINGS.map(s=>({...s,state:'quiet',cents:null,level:0})));}
-function cue(){ $('strum-cue').hidden=heardNote||activePage!=='tuner'||document.hidden||!['idle','listening'].includes(mode); }
+function placeCue(){
+  if(activePage!=='tuner'||document.hidden)return;
+  const ear=$('listen').getBoundingClientRect(),room=$('instrument').getBoundingClientRect(),cue=$('strum-cue');
+  const x=room.x+room.width/2,y=room.y+room.height*.46;
+  for(const [name,value] of Object.entries({earX:ear.x+ear.width/2-16,earY:ear.y+ear.height/2-12,guitarX:x-18,guitarY:y+12,centreX:x,centreY:y}))cue.style.setProperty('--'+name,value+'px');
+}
+function cue(){
+  $('strum-cue').hidden=heardNote||activePage!=='tuner'||document.hidden||!['idle','listening'].includes(mode);
+  $('strum-cue').dataset.stage=mode==='listening'?'strum':'tap';placeCue();
+}
 function state(next,message){
   mode=next;
   const label=next==='requesting'?'cancel':next==='listening'?'stop listening':'listen';
   $('listen-label').textContent=label;$('listen').setAttribute('aria-label',label);$('listen').title=label;
   $('listen').setAttribute('aria-pressed',String(next==='listening'));
   $('listen').dataset.mode=next;
-  $('status').textContent=next==='listening'&&heardNote?'Let it ring.':message;
+  $('status').textContent=next==='listening'?(heardNote?'Let it ring.':'Strum your guitar.'):message;
   $('settings-status').textContent=message;$('settings-status').hidden=next==='listening';
   $('input-signal').hidden=next!=='listening';if(next!=='listening')resetReadings();cue();
 }
@@ -43,7 +55,8 @@ const mic=new Microphone((next,volume,capture)=>{
   if(!heardNote&&next.some(s=>['flat','sharp','tuned'].includes(s.state))){heardNote=true;$('status').textContent='Let it ring.';cue();}
   show(rememberTuning(next,tuningMemory));
   $('input-level').value=Math.max(-100,volume);
-  $('input-label').textContent=volume<=-100?'no sound yet':next.some(s=>s.tracking)?'following a fading note':volume<config.gate?'below sensitivity':'hearing sound';
+  $('input-label').textContent=volume<=-100?'no sound reaching the mic':next.some(s=>['flat','sharp','tuned'].includes(s.state))?'note found':volume<config.gate?'too quiet — move closer':'sound, but no clear note';
+  $('input-signal').dataset.heard=String(next.some(s=>['flat','sharp','tuned'].includes(s.state)));
   $('input-db').textContent=volume<=-100?'< -100 dB':Math.round(volume)+' dB';
   const flag=value=>value===true?'on':value===false?'off':'not reported';
   $('mic-details').textContent=`${capture.sampleRate} Hz · ${capture.channelCount??'?'} channel(s). Noise reduction: ${flag(capture.noiseSuppression)}. Echo cancellation: ${flag(capture.echoCancellation)}. Automatic gain: ${flag(capture.autoGainControl)}.`;
@@ -67,22 +80,18 @@ function navigate(page){
 for(const page of ['settings','about'])$('nav-'+page).onclick=()=>navigate(activePage===page?'tuner':page);
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&activePage!=='tuner')navigate('tuner');});
 $('install-shortcut').onclick=()=>{$('nav-about').click();$('install').click();};
-function save(){try{localStorage.setItem('strum.settings.v1',JSON.stringify(config));}catch{}}
-$('gate').oninput=()=>{config=settings({...config,gate:-Number($('gate').value)});labels();save();};
-$('rejection').onchange=()=>{config=settings({...config,rejection:Number($('rejection').value)});labels();save();};
+for(const input of document.querySelectorAll('input[name=room]'))input.onchange=()=>{
+  profile=input.value;config=settings(listeningProfiles[profile]);labels();
+  try{localStorage.setItem('strum.listening.v2',profile);}catch{}
+};
 $('precision').onchange=()=>{$('instrument').classList.toggle('precision', $('precision').checked);};
 function labels(){
-  $('gate').value=-config.gate;$('gate-label').textContent=config.gate+' dB';
-  $('gate').setAttribute('aria-valuetext',`${config.gate} decibels; higher sensitivity hears quieter notes`);
+  document.querySelector(`input[name=room][value=${profile}]`).checked=true;
+  $('threshold').textContent=config.gate+' dB';
   $('input-level').low=config.gate;
-  // Preserve saved fine-grained values until a different preset is chosen.
-  const old=$('saved-filter');if(old)old.remove();
-  if(![.15,.35,.75].includes(config.rejection)){
-    const option=new Option(config.rejection<.3?'gentle (saved)':config.rejection<.7?'balanced (saved)':'strict (saved)',config.rejection);
-    option.id='saved-filter';$('rejection').append(option);
-  }
-  $('rejection').value=config.rejection;
 } labels();resetReadings();
+containTaps(document.querySelector('main'));
+const cueLayout=new ResizeObserver(placeCue);cueLayout.observe($('instrument'));cueLayout.observe($('listen'));
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 let previousTime=0;
 function draw(time){

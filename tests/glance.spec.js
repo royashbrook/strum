@@ -30,22 +30,25 @@ test('mobile chrome resists selection and double-tap zoom without disabling pinc
   for(const size of [{width:360,height:640},{width:430,height:932},{width:932,height:430}]){
     await page.setViewportSize(size);if(await page.locator('#settings').isHidden())await page.locator('#nav-settings').click();
     expect(await page.locator('#settings').evaluate(n=>getComputedStyle(n).userSelect??getComputedStyle(n).webkitUserSelect)).toBe('none');
-    expect(await page.locator('#settings').evaluate(n=>getComputedStyle(n).overscrollBehaviorY)).toBe('contain');
+    expect(await page.locator('#settings').evaluate(n=>getComputedStyle(n).overscrollBehaviorY)).toBe('none');
+    expect(await page.locator('body').evaluate(n=>getComputedStyle(n).position)).toBe('fixed');
+    expect(await page.locator('html').evaluate(n=>getComputedStyle(n).overflowY)).toBe('hidden');
     expect(await page.locator('body').evaluate(n=>getComputedStyle(n).touchAction)).toBe('manipulation');
     expect(await page.locator('meta[name=viewport]').getAttribute('content')).not.toMatch(/user-scalable=no|maximum-scale=1/);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
-    await page.locator('#gate').fill('85');await page.locator('#rejection').selectOption('0.75');await page.locator('#precision').check();
-    await expect(page.locator('#gate-label')).toHaveText('-85 dB');
+    await page.getByRole('radio',{name:'Quiet guitar'}).check();await page.locator('#precision').check();
+    await expect(page.locator('#threshold')).toHaveText('-85 dB');
     await page.screenshot({path:info.outputPath(`settings-${size.width}.png`)});
   }
 });
 
 test('fading measured notes keep moving below the normal gate and expire instead of guessing',async({page})=>{
-  await fakeMic(page);await page.goto('/');await page.locator('#listen').click();
+  await fakeMic(page);await page.goto('/');await page.locator('#nav-settings').click();await page.getByRole('radio',{name:'Noisy room'}).check();await page.locator('#listen').click();
   const send=async f=>page.evaluate(f=>{window.testSpectrum=f.bins;window.testLevel=10**(f.rms/20);},{bins:Array.from(f.spectrum),rms:f.rms});
   await send(audioFixture({notes:[[1,-20]],db:-42}));
   const a=page.locator('.string').nth(1);await expect(a).toHaveAttribute('data-state','flat');
-  await send(audioFixture({notes:[[1,-15]],db:-72}));await expect(a).toHaveAttribute('data-tracking','true');
+  const faint=audioFixture({notes:[[1,-15]],db:-68});expect(faint.rms).toBeLessThan(-55);expect(faint.rms).toBeGreaterThan(-73);
+  await send(faint);await expect(a).toHaveAttribute('data-tracking','true');
   await expect(a.locator('.reading-detail')).toHaveText('↑ 15¢');
   await expect(a).toHaveAttribute('data-state','quiet',{timeout:4000});
   await expect(a).not.toHaveAttribute('data-held','true');
@@ -68,7 +71,7 @@ test('native audio continues a real decaying stream below the user gate without 
       window.decayAudio={context,oscillator,gain};return destination.stream;
     }}});
   });
-  await page.goto('/');await page.locator('#listen').click();const a=page.locator('.string').nth(1);
+  await page.goto('/');await page.locator('#nav-settings').click();await page.getByRole('radio',{name:'Noisy room'}).check();await page.locator('#listen').click();const a=page.locator('.string').nth(1);
   await expect(a).toHaveAttribute('data-state','flat');
   await page.evaluate(()=>decayAudio.gain.gain.setTargetAtTime(10**(-72/20),decayAudio.context.currentTime,.08));
   await expect(a).toHaveAttribute('data-tracking','true');
