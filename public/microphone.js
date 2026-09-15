@@ -17,10 +17,13 @@ export class Microphone {
       await context.resume();
       if (generation !== this.generation) { void context.close().catch(() => {}); return; }
       stream = await navigator.mediaDevices.getUserMedia({ audio: {
-        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 1 },
       }});
       if (generation !== this.generation) { stream.getTracks().forEach(t => t.stop()); void context.close().catch(() => {}); return; }
       this.stream = stream;
+      const actual = stream.getTracks()[0]?.getSettings?.() ?? {};
+      // Read only audio configuration, never device IDs or microphone labels.
+      const capture = Object.fromEntries(['echoCancellation', 'noiseSuppression', 'autoGainControl', 'channelCount'].map(key => [key, actual[key]]));
       const analyser = context.createAnalyser(); analyser.fftSize = FFT_SIZE; analyser.smoothingTimeConstant = 0;
       const source = context.createMediaStreamSource(stream); source.connect(analyser); this.source = source;
       const spectrum = new Float32Array(analyser.frequencyBinCount), samples = new Float32Array(FFT_SIZE);
@@ -35,7 +38,7 @@ export class Microphone {
       this.timer = setInterval(() => {
         analyser.getFloatFrequencyData(spectrum); analyser.getFloatTimeDomainData(samples);
         const volume = levelDb(samples);
-        this.onFrame(analyseSpectrum(spectrum, context.sampleRate, volume, this.options()), volume);
+        this.onFrame(analyseSpectrum(spectrum, context.sampleRate, volume, this.options()), volume, { ...capture, sampleRate: context.sampleRate });
       }, 90);
     } catch (error) {
       if (generation !== this.generation) return;

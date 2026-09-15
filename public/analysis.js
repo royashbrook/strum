@@ -5,10 +5,10 @@ export const STRINGS = [
   { note: 'B', octave: 3, hz: 246.9417 }, { note: 'E', octave: 4, hz: 329.6276 },
 ];
 export const FFT_SIZE = 32768;
-export const defaults = { gate: -48, rejection: 0.6 };
+export const defaults = { gate: -60, rejection: 0.35 };
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 export function settings(value = {}) {
-  return { gate: Number.isFinite(value?.gate) ? clamp(value.gate, -65, -15) : defaults.gate,
+  return { gate: Number.isFinite(value?.gate) ? clamp(value.gate, -85, -15) : defaults.gate,
     rejection: Number.isFinite(value?.rejection) ? clamp(value.rejection, 0, 1) : defaults.rejection };
 }
 export function levelDb(samples) {
@@ -27,7 +27,15 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
     const denominator = db[i - 1] - 2 * db[i] + db[i + 1];
     const offset = Number.isFinite(denominator) && denominator < 0
       ? clamp((db[i - 1] - db[i + 1]) / (2 * denominator), -0.5, 0.5) : 0;
-    peaks.push({ hz: (i + offset) * binHz, db: db[i] });
+    // Measure above the nearby noise, excluding the FFT window's main lobe.
+    // Counting arbitrary bumps as harmonics made broadband noise look like strings.
+    const neighbours = [];
+    for (let d = -12; d <= 12; d++) if (Math.abs(d) >= 4 && i + d >= 0 && i + d < db.length)
+      neighbours.push(Number.isFinite(db[i + d]) ? db[i + d] : -120);
+    neighbours.sort((a, b) => a - b);
+    const prominence = db[i] - neighbours[Math.floor(neighbours.length / 2)];
+    if (prominence < 10 + config.rejection * 10) continue;
+    peaks.push({ hz: (i + offset) * binHz, db: db[i], prominence });
   }
   if (!peaks.length) return output;
   const loudest = Math.max(...peaks.map(p => p.db));
@@ -43,7 +51,14 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
         const p = near(fundamental.hz * h, Math.max(binHz * 1.7, fundamental.hz * h * 0.004));
         if (p && p.db > fundamental.db - 30 && p.db > loudest - 48) harmonics++;
       }
-      const confidence = harmonics / 4;
+      // A clear, isolated fundamental is useful after its overtones fade, notably
+      // on nylon strings. Require it to dominate unrelated tones, not many overtones.
+      const isolated = fundamental.db >= loudest - 3 && !peaks.some(p => {
+        if (p.db < fundamental.db - 12 || Math.abs(p.hz - fundamental.hz) < binHz * 3) return false;
+        const h = Math.round(p.hz / fundamental.hz);
+        return h < 2 || h > 6 || Math.abs(p.hz - h * fundamental.hz) > binHz * 2;
+      });
+      const confidence = isolated ? 1 : harmonics / 4;
       if (!best || confidence > best.confidence || (confidence === best.confidence && fundamental.db > best.db))
         best = { ...fundamental, confidence };
     }
