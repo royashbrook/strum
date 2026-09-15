@@ -44,7 +44,7 @@ test('ear is a one-action start/stop; settings tune the live mic; About stops it
   await page.locator('#listen').click();await expect(page.locator('#tuner')).toBeVisible();await expect(page.locator('#listen')).toHaveAttribute('aria-pressed','true');
   expect(await page.evaluate(()=>probe.requests)).toBe(1);
   await page.locator('#nav-settings').click();await expect(page.locator('#input-signal')).toBeVisible();
-  await page.locator('#gate').fill('80');expect(await page.evaluate(()=>probe.stops)).toBe(0);
+  await page.getByRole('radio',{name:'Noisy room'}).check();expect(await page.evaluate(()=>probe.stops)).toBe(0);
   await page.locator('#nav-settings').click();await expect(page.locator('#tuner')).toBeVisible();expect(await page.evaluate(()=>probe.stops)).toBe(0);
   await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveAttribute('aria-pressed','false');expect(await page.evaluate(()=>probe.stops)).toBe(1);
   await page.locator('#nav-about').click();await page.locator('#listen').click();await expect(page.locator('#tuner')).toBeVisible();expect(await page.evaluate(()=>probe.requests)).toBe(2);
@@ -54,9 +54,17 @@ test('ear is a one-action start/stop; settings tune the live mic; About stops it
 test('strumming hand teaches once per opening, never fakes readings or retires on noise',async({page})=>{
   await fakeMic(page);await page.goto('/');const cue=page.locator('#strum-cue');
   await expect(cue).toBeVisible();expect(await page.evaluate(()=>probe.requests)).toBe(0);
-  const hand=cue.locator('.cue-hand'),x1=(await hand.boundingBox()).x;await page.waitForTimeout(1000);const x2=(await hand.boundingBox()).x;expect(Math.abs(x2-x1)).toBeGreaterThan(10);
+  await expect(cue).toHaveAttribute('data-stage','tap');
+  const hand=cue.locator('.cue-hand');
+  await hand.evaluate(n=>{const a=n.getAnimations()[0];a.pause();a.currentTime=1000;});
+  const first=await hand.boundingBox(),ear=await page.locator('#listen').boundingBox();
+  expect(first.y).toBeGreaterThan(ear.y);expect(first.y).toBeLessThan(ear.y+ear.height);
+  await hand.evaluate(n=>n.getAnimations()[0].currentTime=2800);
+  const second=await hand.boundingBox();expect(second.y).toBeLessThan(first.y-60);
+  await expect(cue.locator('.cue-guitar')).toHaveCount(1);
   await expect(page.locator('.string[data-state=quiet]')).toHaveCount(6);
   await page.locator('#listen').click();
+  await expect(cue).toHaveAttribute('data-stage','strum');await expect(page.locator('#status')).toHaveText('Strum your guitar.');
   const noise=audioFixture({frequencies:[],noise:-35});
   await page.evaluate(f=>{window.testSpectrum=f.bins;window.testLevel=10**(f.rms/20);},{bins:Array.from(noise.spectrum),rms:noise.rms});
   await page.waitForTimeout(400);await expect(cue).toBeVisible();

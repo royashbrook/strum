@@ -57,7 +57,7 @@ test('installed shell survives network loss and all about links own 44px targets
 test('real A-to-B worker update waits for consent and preserves settings', async ({ page, context, browserName }) => {
   await fakeMic(page);
   await boot(page);
-  await page.locator('#nav-settings').click(); await page.locator('#gate').fill('35'); await page.locator('#nav-settings').click();
+  await page.locator('#nav-settings').click(); await page.getByRole('radio',{name:'Noisy room'}).check(); await page.locator('#nav-settings').click();
   await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
   await page.evaluate(() => { window.sameSession = true; });
   root = 'b';
@@ -74,12 +74,12 @@ test('real A-to-B worker update waits for consent and preserves settings', async
   await page.locator('#apply-update').click();
   await expect(page.locator('#version')).toContainText(second, { timeout: 15000 });
   await expect(page.locator('#update-notice')).toBeHidden();
-  await expect(page.locator('#gate')).toHaveValue('35');
+  await expect(page.locator('input[value=noisy]')).toBeChecked();
   await expect(page.locator('#listen')).toHaveText('listen');
   expect(await page.evaluate(()=>sessionStorage.getItem('test-track-stops'))).toBe('2');
   await disconnect(context, browserName); await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#version')).toContainText(second);
-  await expect(page.locator('#gate')).toHaveValue('35');
+  await expect(page.locator('input[value=noisy]')).toBeChecked();
 });
 
 test('incomplete new release cannot activate or advertise itself as downloaded', async ({ page }) => {
