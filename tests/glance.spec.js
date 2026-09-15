@@ -21,14 +21,14 @@ test('markers show direction and distance without visible numbers, then centre a
   await expect.poll(async()=>Math.abs(await centre(e.locator('.bead'))-await centre(e.locator('.target')))).toBeLessThan(2);
   await page.evaluate(()=>window.testSpectrum=null);await expect(e).toHaveAttribute('data-held','true');
   await expect.poll(()=>e.locator('.bead').evaluate(n=>getComputedStyle(n).backgroundColor)).toBe('rgb(21, 23, 26)');
-  await page.locator('#settings>summary').click();await page.locator('#precision').check();
+  await page.locator('#nav-settings').click();await page.locator('#precision').check();
   expect(await e.locator('.reading-detail').evaluate(n=>getComputedStyle(n).clipPath)).toBe('none');
 });
 
 test('mobile chrome resists selection and double-tap zoom without disabling pinch, settings remain reachable',async({page},info)=>{
   await fakeMic(page);await page.goto('/');
   for(const size of [{width:360,height:640},{width:430,height:932},{width:932,height:430}]){
-    await page.setViewportSize(size);await page.locator('#settings').evaluate(n=>n.open=true);
+    await page.setViewportSize(size);if(await page.locator('#settings').isHidden())await page.locator('#nav-settings').click();
     expect(await page.locator('#settings').evaluate(n=>getComputedStyle(n).userSelect??getComputedStyle(n).webkitUserSelect)).toBe('none');
     expect(await page.locator('#settings').evaluate(n=>getComputedStyle(n).overscrollBehaviorY)).toBe('contain');
     expect(await page.locator('body').evaluate(n=>getComputedStyle(n).touchAction)).toBe('manipulation');

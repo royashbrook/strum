@@ -5,6 +5,14 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { build } from '../scripts/build.mjs';
 
+test('recovery prompts name the visible ear control', async () => {
+  for (const file of ['index.html', 'microphone.js']) {
+    const source = await readFile(resolve('public', file), 'utf8');
+    assert.equal(/tap listen/i.test(source), false, `${file}: stale control name`);
+    assert.ok(source.includes('Tap the ear'), `${file}: name the visible control`);
+  }
+});
+
 test('release contains a complete versioned module graph, stable install identity and microphone-safe headers', async () => {
   const destination = await mkdtemp(resolve(tmpdir(), 'strum-release-'));
   try {
@@ -18,7 +26,7 @@ test('release contains a complete versioned module graph, stable install identit
       assert.ok(sw.includes(`/assets/${id}/${name}`));
       assert.ok((await readFile(resolve(destination, 'assets', id, name))).length);
     }
-    for (const name of ['thumb-up.svg', 'third-party.txt']) {
+    for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'third-party.txt']) {
       assert.ok(sw.includes('/' + name));
       assert.ok((await readFile(resolve(destination, name))).length);
     }
