@@ -3,7 +3,7 @@ import { FFT_SIZE, STRINGS, levelDb } from '../public/analysis.js';
 // Deterministic audio samples, not hand-painted spectral peaks. This mirrors the
 // Web Audio Blackman window + DFT, using an iterative radix-2 FFT only in tests.
 export function audioFixture({ rate = 48000, notes = [[0, 0]], db = -45, weights = [1, .04, .01], noise = -100, phase = 0, decay = 0, frequencies, seed = 1234567 } = {}) {
-  const n = FFT_SIZE, real = new Float64Array(n), imag = new Float64Array(n), samples = new Float32Array(n);
+  const n = FFT_SIZE, samples = new Float32Array(n);
   const tones = frequencies ?? notes.map(([i, cents]) => STRINGS[i].hz * 2 ** (cents / 1200));
   for (let i = 0; i < n; i++) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -11,8 +11,15 @@ export function audioFixture({ rate = 48000, notes = [[0, 0]], db = -45, weights
     for (const hz of tones) for (let h = 0; h < weights.length; h++)
       value += weights[h] * Math.sin(2 * Math.PI * hz * (h + 1) * i / rate + phase * (h + 1)) * 10 ** (db / 20) * Math.exp(-decay * i / rate);
     samples[i] = value;
-    real[i] = value * (.42 - .5 * Math.cos(2 * Math.PI * i / n) + .08 * Math.cos(4 * Math.PI * i / n));
   }
+  return sampleFixture(samples, rate);
+}
+
+export function sampleFixture(samples, rate = 48000) {
+  const n = FFT_SIZE, real = new Float64Array(n), imag = new Float64Array(n);
+  samples = samples.slice(-n);
+  for (let i = 0; i < n; i++)
+    real[i] = samples[i] * (.42 - .5 * Math.cos(2 * Math.PI * i / n) + .08 * Math.cos(4 * Math.PI * i / n));
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;
     for (; j & bit; bit >>= 1) j ^= bit;

@@ -63,10 +63,25 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
         best = { ...fundamental, confidence };
     }
     if (!best) continue;
+    // A microphone can lose the lower fundamental while leaving its overtones.
+    // Two other partials must support that lower string before calling this
+    // ambiguous; a genuine quiet B/high E alone must remain readable.
+    const missingLower = STRINGS.slice(0, i).some((lower, j) => {
+      if (!['quiet', 'uncertain'].includes(output[j].state)) return false;
+      const harmonic = Math.round(best.hz / lower.hz), implied = best.hz / harmonic;
+      if (harmonic < 2 || harmonic > 5 || Math.abs(1200 * Math.log2(implied / lower.hz)) >= 80) return false;
+      let support = 0;
+      for (let h = 2; h <= 7; h++) {
+        if (h % harmonic === 0) continue;
+        const p = near(implied * h, Math.max(binHz * 1.7, implied * h * .004));
+        if (p && p.db > best.db - 30) support++;
+      }
+      return support >= 2;
+    });
     const cents = 1200 * Math.log2(best.hz / string.hz);
-    output[i] = { ...string, measuredHz: best.hz, confidence: best.confidence,
+    output[i] = { ...string, measuredHz: best.hz, confidence: missingLower ? 0 : best.confidence,
       level: clamp((best.db - loudest + 40) / 40, 0, 1), cents,
-      state: best.confidence < config.rejection ? 'uncertain' : Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
+      state: missingLower || best.confidence < config.rejection ? 'uncertain' : Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
   }
   // A single steady spectrum cannot distinguish a string from an exactly overlapping
   // overtone. Never invent an independent high E/B from the low E's harmonics.

@@ -1,6 +1,8 @@
 import {test,expect} from '@playwright/test';
 import { spectrum } from './spectrum.js';
 import { fakeMic } from './microphone-fixture.js';
+import { filteredPluck } from './filtered-pluck.js';
+import { audioFixture } from './waveform.js';
 test('quiet boot, compact version/about header, no microphone without a gesture',async({page})=>{
   await fakeMic(page);await page.goto('/');await expect(page.locator('.string')).toHaveCount(6);await expect(page.locator('nav, #demo')).toHaveCount(0);await expect(page.locator('#header-version')).toHaveText(/^v\d+\.\d+\.\d+$/);expect(await page.evaluate(()=>probe.requests)).toBe(0);await expect(page.locator('.string[data-state=tuned]')).toHaveCount(0);
   for(const size of [{width:390,height:844},{width:360,height:640},{width:430,height:932}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);for(const id of ['listen','nav-about']){const box=await page.locator('#'+id).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(size.height);}}
@@ -77,7 +79,29 @@ test('native Web Audio measures a soft fundamental through a real media stream',
   await page.locator('#settings>summary').click();await expect(page.locator('#input-label')).toHaveText('below sensitivity');
   await page.locator('#gate').fill('85');await expect(page.locator('.string').nth(1).locator('.reading')).toHaveText('low');
   await expect(page.locator('.string').nth(1).locator('.reading-detail')).toHaveText('↑ 20¢');
-  await page.evaluate(()=>{generatedAudio.oscillator.frequency.value=110;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
+  await page.evaluate(()=>{const {context,oscillator}=generatedAudio;oscillator.frequency.value=110;generatedAudio.settledAt=context.currentTime+2*32768/context.sampleRate;});
+  await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
+  // Let a complete new-pitch window pass through both the generated stream and
+  // analyser before cutting it off; the first green can still overlap old audio.
+  await page.waitForFunction(()=>generatedAudio.context.currentTime>=generatedAudio.settledAt);
+  await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
   await page.evaluate(()=>{generatedAudio.gain.gain.value=0;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-held','true');
   await page.locator('#listen').click();await page.evaluate(()=>generatedAudio.context.close());
+});
+
+test('filtered low E never latches a ghost B, while a quiet real B still greens', async ({page})=>{
+  await fakeMic(page);await page.goto('/');await page.locator('#listen').click();
+  const filtered=filteredPluck();
+  await page.evaluate(frame=>{window.testSpectrum=frame.bins;window.testLevel=10**(frame.rms/20);}, {bins:Array.from(filtered.spectrum),rms:filtered.rms});
+  const b=page.locator('.string').nth(4);
+  await expect(b).toHaveAttribute('data-state','uncertain');
+  await page.waitForTimeout(500);
+  await expect(b).toHaveAttribute('data-state','uncertain');
+  await expect(b).toHaveAttribute('data-held','false');
+  await page.locator('#settings>summary').click();await page.locator('#gate').fill('85');
+  const real=audioFixture({notes:[[4,0]],db:-72,decay:1.5});
+  await page.evaluate(frame=>{window.testSpectrum=frame.bins;window.testLevel=10**(frame.rms/20);}, {bins:Array.from(real.spectrum),rms:real.rms});
+  await expect(b).toHaveAttribute('data-state','tuned');
+  await page.evaluate(()=>{window.testSpectrum=null;window.testLevel=0;});
+  await expect(b).toHaveAttribute('data-held','true');
 });
