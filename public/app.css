@@ -1,4 +1,6 @@
 :root { color-scheme: dark; --bg:#15171a; --paper:#24272c; --ink:#eceef0; --muted:#b2b5bc; --accent:#3ddc84; --warn:#c5c8cf; --line:#8a8f98; --radius:18px; font-family:ui-rounded,system-ui,-apple-system,sans-serif; color:var(--ink); background:var(--bg); }
+.reading-detail{display:block;min-height:18px;font-size:12px;color:var(--muted)}.string[data-state=tuned] .reading-detail{color:var(--accent)}
+.guidance > span:first-child,.guidance > span:last-child{color:var(--muted)}.guidance > span{text-align:center}.guidance small{display:block;font-size:12px}
 /* Standalone safe areas and update UI use the same shell surfaces. */
 .mark a{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}
 #update-notice{position:fixed;z-index:5;left:50%;transform:translateX(-50%);top:max(12px,env(safe-area-inset-top));width:calc(100% - 32px);max-width:580px;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);box-shadow:0 8px 40px #0008;display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center}

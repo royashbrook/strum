@@ -14,6 +14,8 @@ An original six-string guitar tuner prototype. Standard EADGBE, A4 = 440 Hz.
 
 ## Install and updates
 
+The tuner labels each heard string **low**, **high**, or **tuned**, with cents and adjustment arrows underneath. Three consecutive in-tune readings remember green for that listening session. When the sound fades or becomes uncertain, **last ✓** distinguishes the saved result from a fresh measurement. A new low/high reading clears green immediately. Stopping listening, switching apps, or leaving the tuner clears the remembered results; preview motion never seeds them. This display memory does not fix the prototype's noise/voice detection limitations.
+
 Phone-test origin: https://strum.royashbrook.com. On iOS, open in Safari, Share, Add to Home Screen. Keep the same shortcut and origin so local settings stay in the same installation.
 
 The app checks for updates every minute while visible, on return, and on demand in About. A fully installed waiting worker offers **update now**; it never interrupts listening automatically. Accepting an update stops the microphone and reloads. About shows the running version and build. The installed shell opens offline; permissions and microphone behavior still need real-device checks.
