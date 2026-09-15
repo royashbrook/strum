@@ -76,13 +76,16 @@ export function wirePwa(beforeUpdate) {
 
   const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let prompt;
-  if (!installed() && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) $('install').hidden = false;
-  addEventListener('beforeinstallprompt', event => { event.preventDefault(); prompt = event; $('install').hidden = installed(); });
+  let installDismissed=false;try{installDismissed=localStorage.getItem('strum.install-tip.dismissed')==='yes';}catch{}
+  function offerInstall(){if(installed())return;$('install').hidden=false;$('install-coach').hidden=installDismissed||!$('about').hidden;}
+  $('dismiss-install').onclick=()=>{installDismissed=true;$('install-coach').hidden=true;try{localStorage.setItem('strum.install-tip.dismissed','yes');}catch{}};
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) offerInstall();
+  addEventListener('beforeinstallprompt', event => { event.preventDefault(); prompt = event; offerInstall(); });
   $('install').onclick = async () => {
     if (!prompt) { $('install-hint').hidden = false; return; }
     const offered = prompt; prompt = null;
     await offered.prompt(); await offered.userChoice;
-    $('install').hidden = true;
+    $('install').hidden = true;$('install-coach').hidden = true;
   };
-  addEventListener('appinstalled', () => { prompt = null; $('install').hidden = true; $('install-hint').hidden = true; });
+  addEventListener('appinstalled', () => { prompt = null; $('install').hidden = true; $('install-hint').hidden = true;$('install-coach').hidden = true; });
 }

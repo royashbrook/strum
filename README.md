@@ -1,6 +1,6 @@
 # strum
 
-An original six-string guitar tuner prototype. Standard EADGBE, A4 = 440 Hz.
+An original six-string guitar tuner. Standard EADGBE, A4 = 440 Hz.
 
 `npm test` runs deterministic spectral tests. `npm run dev` opens the local-only development server at http://127.0.0.1:4193. Microphone access requires localhost or HTTPS. No runtime dependencies and no audio recording, upload, or playback.
 
@@ -8,13 +8,15 @@ An original six-string guitar tuner prototype. Standard EADGBE, A4 = 440 Hz.
 
 - The six-string UI and original FFT peak/harmonic estimator are a scaffold. Synthetic spectra validate logic, not real-world tuning accuracy.
 - Exact harmonic overlap is unresolved. Low E's third and fourth harmonics overlap B and high E. Those readings remain `?` when supported only by ambiguous evidence; no fabricated all-green result.
-- Harmonic filtering is not reliable voice classification. Voices, mains hum and broadband noise can register false strings. Phase-dependent low-E uncertainty also remains under review.
+- Note filtering is not voice classification. A clear voice or hum at a string frequency can still register as a note. Broadband-noise rejection and fundamental-dominant decay checks are now waveform-tested, not a blanket claim about every microphone or room.
 - Recorded guitar, noisy-room, missing-fundamental, onset separation, and real iPhone/Android microphone validation are required before an accuracy claim.
 - Final brand/icon approval is pending; the six-bar icon is explicitly a draft for phone testing.
 
 ## Install and updates
 
-The tuner labels each heard string **low**, **high**, or **tuned**, with cents and adjustment arrows underneath. Three consecutive in-tune readings remember green for that listening session. When the sound fades or becomes uncertain, **last ✓** distinguishes the saved result from a fresh measurement. A new low/high reading clears green immediately. Stopping listening, switching apps, or leaving the tuner clears the remembered results; preview motion never seeds them. This display memory does not fix the prototype's noise/voice detection limitations.
+The tuner labels each heard string **low**, **high**, or **tuned**, with cents and adjustment arrows underneath. Three consecutive in-tune readings remember green for that listening session. When the sound fades or becomes uncertain, **last ✓** distinguishes the saved result from a fresh measurement. A new low/high reading clears green immediately. Stopping listening, switching apps, or leaving the tuner clears the remembered results. There is no simulated motion preview.
+
+Sensitivity runs from **hear less** to **hear more**, with the cutoff visible in dB. These are digital input levels (dBFS), not calibrated room loudness. The input meter measures raw microphone samples before pitch rejection. The note filter offers gentle, balanced and strict checks; old saved numeric settings are retained until changed. A clear isolated fundamental no longer needs several audible overtones. See [phone-listening evidence](docs/phone-listening.md).
 
 Phone-test origin: https://strum.royashbrook.com. On iOS, open in Safari, Share, Add to Home Screen. Keep the same shortcut and origin so local settings stay in the same installation.
 
@@ -24,6 +26,6 @@ The app checks for updates every minute while visible, on return, and on demand 
 
 ## Implementation
 
-`analysis.js` is a pure spectrum-to-six-readings function. `microphone.js` owns permission, tracks, context and cancellation. `app.js` owns UI and explanatory motion; the display is not an oscilloscope. Demo mode is explicitly simulated. Backgrounding or leaving the tuner stops microphone tracks; a late permission result is discarded.
+`analysis.js` is a pure spectrum-to-six-readings function. `microphone.js` owns permission, tracks, context and cancellation. `app.js` owns UI and explanatory motion; the display is not an oscilloscope. Backgrounding or leaving the tuner stops microphone tracks; a late permission result is discarded. Listen remains an explicit action, with no silent reopening of the microphone.
 
 Original implementation, not copied from reference tuner projects. Platform references: [Web Audio analyser](https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode), [microphone constraints](https://developer.mozilla.org/en-US/docs/Web/API/Media_Capture_and_Streams_API/Constraints).

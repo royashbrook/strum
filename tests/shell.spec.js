@@ -1,30 +1,17 @@
 import {test,expect} from '@playwright/test';
 import { spectrum } from './spectrum.js';
-async function fakeMic(page,behavior='resolve') {
-  await page.addInitScript(behavior=>{
-    window.probe={requests:0,stops:0,closes:0};
-    const track={stop(){window.probe.stops++;},addEventListener(){}};
-    const stream={getTracks:()=>[track]};
-    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:()=>{window.probe.requests++;if(behavior==='reject')return Promise.reject(Object.assign(new Error(),{name:'NotAllowedError'}));if(behavior==='defer')return new Promise(resolve=>{window.resolveMic=()=>resolve(stream);});return Promise.resolve(stream);}}});
-    window.AudioContext=class {
-      constructor(){this.state='running';this.sampleRate=48000;}
-      resume(){return Promise.resolve();}close(){this.state='closed';window.probe.closes++;return Promise.resolve();}
-      addEventListener(){}createMediaStreamSource(){return {connect(){},disconnect(){}};}
-      createAnalyser(){return {frequencyBinCount:16384,getFloatFrequencyData(a){a.fill(-Infinity);if(window.testSpectrum)a.set(window.testSpectrum);},getFloatTimeDomainData(a){a.fill(window.testSpectrum?.length ? 0.1 : 0);}};}
-    };
-  },behavior);
-}
-test('quiet boot, six readings, two nav items, no microphone without a gesture',async({page})=>{
-  await fakeMic(page);await page.goto('/');await expect(page.locator('.string')).toHaveCount(6);await expect(page.locator('nav button')).toHaveCount(2);expect(await page.evaluate(()=>probe.requests)).toBe(0);await expect(page.locator('.string[data-state=tuned]')).toHaveCount(0);
-  for(const size of [{width:390,height:844},{width:360,height:640},{width:430,height:932}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);for(const id of ['listen','demo','nav-tuner','nav-about']){const box=await page.locator('#'+id).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(size.height);}}
+import { fakeMic } from './microphone-fixture.js';
+test('quiet boot, compact version/about header, no microphone without a gesture',async({page})=>{
+  await fakeMic(page);await page.goto('/');await expect(page.locator('.string')).toHaveCount(6);await expect(page.locator('nav, #demo')).toHaveCount(0);await expect(page.locator('#header-version')).toHaveText(/^v\d+\.\d+\.\d+$/);expect(await page.evaluate(()=>probe.requests)).toBe(0);await expect(page.locator('.string[data-state=tuned]')).toHaveCount(0);
+  for(const size of [{width:390,height:844},{width:360,height:640},{width:430,height:932}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);for(const id of ['listen','nav-about']){const box=await page.locator('#'+id).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(size.height);}}
 });
-test('demo is explicitly simulated and leaves no microphone running',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#demo').click();await expect(page.locator('#status')).toContainText('Simulated readings');expect(await page.evaluate(()=>probe.requests)).toBe(0);await page.locator('#nav-about').click();await page.locator('#nav-tuner').click();await expect(page.locator('.string[data-state=quiet]')).toHaveCount(6);});
+test('about keeps privacy guidance without prototype copy and returns focus',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#nav-about').click();await expect(page.locator('#about')).not.toContainText(/prototype|draft icon|Phone-test/i);await expect(page.locator('#about')).toContainText('never recorded or uploaded');await expect(page.locator('#about-title')).toBeFocused();await page.locator('#nav-tuner').click();await expect(page.locator('#listen')).toBeFocused();expect(await page.evaluate(()=>probe.requests)).toBe(0);});
 test('permission denial stays actionable',async({page})=>{await fakeMic(page,'reject');await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#status')).toContainText('not allowed');await expect(page.locator('#listen')).toHaveText('listen');expect(await page.evaluate(()=>probe.closes)).toBe(1);});
 test('stop and about release tracks',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');await page.locator('#listen').click();expect(await page.evaluate(()=>probe.stops)).toBe(1);await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');await page.locator('#nav-about').click();expect(await page.evaluate(()=>probe.stops)).toBe(2);});
 test('late permission result is disposed after leaving tuner',async({page})=>{await fakeMic(page,'defer');await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('cancel');await page.locator('#nav-about').click();await page.evaluate(()=>resolveMic());await expect.poll(()=>page.evaluate(()=>probe.stops)).toBe(1);await page.locator('#nav-tuner').click();await expect(page.locator('#listen')).toHaveText('listen');});
 test('backgrounding stops the microphone and does not restart it',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});expect(await page.evaluate(()=>probe.stops)).toBe(1);await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});expect(await page.evaluate(()=>probe.requests)).toBe(1);await expect(page.locator('#listen')).toHaveText('listen');});
-test('settings survive reload and blocked storage does not block boot',async({page})=>{await page.goto('/');await page.locator('summary').click();await page.locator('#gate').fill('-35');await page.reload();await expect(page.locator('#gate')).toHaveValue('-35');await page.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked');}});});await page.reload();await expect(page.locator('.string')).toHaveCount(6);await page.locator('summary').click();await page.locator('#gate').fill('-40');await expect(page.locator('#gate-label')).toHaveText('-40 dB');});
-test('reduced-motion screenshot',async({page},info)=>{await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');await page.locator('#demo').click();await expect(page.locator('.string[data-state=tuned]')).toHaveCount(4);await page.screenshot({path:info.outputPath('strum.png')});});
+test('settings survive reload and blocked storage does not block boot',async({page})=>{await page.goto('/');await page.locator('#settings>summary').click();await page.locator('#gate').fill('35');await page.locator('#rejection').selectOption('0.75');await page.reload();await expect(page.locator('#gate')).toHaveValue('35');await expect(page.locator('#rejection')).toHaveValue('0.75');await page.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked');}});});await page.reload();await expect(page.locator('.string')).toHaveCount(6);await page.locator('#settings>summary').click();await page.locator('#gate').fill('85');await expect(page.locator('#gate-label')).toHaveText('-85 dB');});
+test('reduced-motion screenshot',async({page},info)=>{await fakeMic(page);await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');await page.locator('#listen').click();await page.evaluate(bins=>{window.testSpectrum=bins;},Array.from(spectrum([[0,0],[1,0],[2,-15],[3,0],[4,9],[5,0]])));await expect(page.locator('.string').nth(2).locator('.reading')).toHaveText('low');await page.screenshot({path:info.outputPath('strum.png')});});
 
 test('tune strings sequentially, retain fading green, show low/high, and reset a new listen', async ({ page }, info) => {
   await fakeMic(page); await page.goto('/'); await page.locator('#listen').click();
@@ -48,8 +35,9 @@ test('tune strings sequentially, retain fading green, show low/high, and reset a
   await expect(page.locator('.string[data-held=true]')).toHaveCount(0);
 });
 
-test('motion preview cannot seed remembered tuning and low/high labels fit small screens', async ({ page }) => {
-  await fakeMic(page); await page.goto('/'); await page.locator('#demo').click();
+test('low/high labels and open listening settings fit small screens', async ({ page }, info) => {
+  await fakeMic(page); await page.goto('/'); await page.locator('#listen').click();
+  await page.evaluate(bins=>{window.testSpectrum=bins;},Array.from(spectrum([[2,-15],[4,9]])));
   await expect(page.locator('.string').nth(2).locator('.reading')).toHaveText('low');
   await expect(page.locator('.string').nth(4).locator('.reading')).toHaveText('high');
   for (const size of [{width:360,height:640},{width:430,height:932}]) {
@@ -57,8 +45,39 @@ test('motion preview cannot seed remembered tuning and low/high labels fit small
     for (const selector of ['.reading', '.reading-detail']) {
       expect(await page.locator(selector).evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth))).toBe(true);
     }
-    const nav = await page.locator('nav').boundingBox(); expect(nav.y + nav.height).toBeLessThanOrEqual(size.height);
+    await page.locator('#settings').evaluate(node=>{node.open=true;});
+    for (const id of ['listen','gate','rejection']) {
+      const box = await page.locator('#'+id).boundingBox(); expect(box.y + box.height).toBeLessThanOrEqual(size.height);expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({path:info.outputPath(`settings-${size.width}.png`)});
   }
-  await page.locator('#listen').click(); await expect(page.locator('#listen')).toHaveText('stop listening');
-  await expect(page.locator('.string[data-state=quiet]')).toHaveCount(6);
+});
+
+test('raw input is separate from tuning, capture requests music-safe settings, saved controls survive',async({page})=>{
+  await fakeMic(page);await page.addInitScript(()=>localStorage.setItem('strum.settings.v1',JSON.stringify({gate:-65,rejection:.6})));await page.goto('/');
+  await expect(page.locator('#gate')).toHaveValue('65');await expect(page.locator('#rejection')).toHaveValue('0.6');
+  await page.locator('#listen').click();await page.locator('#settings>summary').click();
+  await page.evaluate(()=>{window.testLevel=10**(-74/20);});await expect(page.locator('#input-db')).toHaveText('-74 dB');await expect(page.locator('#input-label')).toHaveText('below sensitivity');
+  await page.locator('#gate').fill('85');await expect(page.locator('#input-label')).toHaveText('hearing sound');await expect(page.locator('.string[data-state=quiet]')).toHaveCount(6);
+  expect(await page.evaluate(()=>probe.constraints.audio)).toEqual({echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:{ideal:1}});
+  await page.locator('#nav-about').click();await expect(page.locator('#mic-details')).toContainText('Noise reduction: off');
+});
+
+test('native Web Audio measures a soft fundamental through a real media stream', async ({page})=>{
+  await page.addInitScript(()=>{
+    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{
+      const context=new AudioContext();await context.resume();
+      const oscillator=context.createOscillator(),gain=context.createGain(),destination=context.createMediaStreamDestination();
+      oscillator.frequency.value=110*2**(-20/1200);gain.gain.value=10**(-72/20);
+      oscillator.connect(gain);gain.connect(destination);oscillator.start();
+      window.generatedAudio={context,oscillator,gain};return destination.stream;
+    }}});
+  });
+  await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
+  await page.locator('#settings>summary').click();await expect(page.locator('#input-label')).toHaveText('below sensitivity');
+  await page.locator('#gate').fill('85');await expect(page.locator('.string').nth(1).locator('.reading')).toHaveText('low');
+  await expect(page.locator('.string').nth(1).locator('.reading-detail')).toHaveText('↑ 20¢');
+  await page.evaluate(()=>{generatedAudio.oscillator.frequency.value=110;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-state','tuned');
+  await page.evaluate(()=>{generatedAudio.gain.gain.value=0;});await expect(page.locator('.string').nth(1)).toHaveAttribute('data-held','true');
+  await page.locator('#listen').click();await page.evaluate(()=>generatedAudio.context.close());
 });
