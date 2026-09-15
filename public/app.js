@@ -1,5 +1,6 @@
 import { STRINGS, settings } from './analysis.js';
 import { Microphone } from './microphone.js';
+import { wirePwa } from './pwa.js';
 let config = settings();
 try { config = settings(JSON.parse(localStorage.getItem('strum.settings.v1'))); } catch {}
 const $ = id => document.getElementById(id), canvas = document.querySelector('canvas'), ctx = canvas.getContext('2d');
@@ -24,6 +25,7 @@ const mic=new Microphone(show,state,()=>config);
 $('listen').onclick=()=>{demo=false;$('demo').textContent='preview motion';if(mode==='listening'||mode==='requesting')mic.stop();else void mic.start();};
 $('demo').onclick=()=>{mic.stop();demo=!demo;$('demo').textContent=demo?'stop preview':'preview motion';$('status').textContent=demo?'Motion preview. Simulated readings, not your microphone.':'Tap listen, then strum all six strings.';if(!demo)resetReadings();};
 function silence(){demo=false;$('demo').textContent='preview motion';mic.stop();}
+wirePwa(silence);
 for(const page of ['tuner','about']) $('nav-'+page).onclick=()=>{silence();for(const id of ['tuner','about']){$(id).hidden=id!==page;$('nav-'+id).removeAttribute('aria-current');}$('nav-'+page).setAttribute('aria-current','page');};
 for(const key of ['gate','rejection']){
   $(key).value=config[key];

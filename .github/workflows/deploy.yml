@@ -1,0 +1,43 @@
+name: Deploy Strum
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Strum checks]
+    branches: [main]
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: strum-production
+  cancel-in-progress: true
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - if: github.event_name == 'workflow_dispatch'
+        run: npx playwright install --with-deps chromium webkit
+      - if: github.event_name == 'workflow_dispatch'
+        run: npm run test:browser
+      - name: Refuse a superseded release
+        run: |
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
