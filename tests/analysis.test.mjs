@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {STRINGS,FFT_SIZE,analyseSpectrum,settings,levelDb} from '../public/analysis.js';
 
-// Deterministic spectral fixtures, not a claim of recorded-guitar accuracy.
-function spectrum(strings,rate=48000){const bins=new Float32Array(FFT_SIZE/2).fill(-120);for(const [index,cents=0]of strings){const f=STRINGS[index].hz*2**(cents/1200);for(let h=1;h<=6;h++){const peak=f*h/rate*FFT_SIZE;for(let b=Math.floor(peak)-3;b<=Math.ceil(peak)+3;b++)if(b>0&&b<bins.length)bins[b]=Math.max(bins[b],-20-8*Math.log2(h)-8*(b-peak)**2);}}return bins;}
+import { spectrum } from './spectrum.js';
 test('bounded settings tolerate missing, malformed and hostile saved values',()=>{assert.deepEqual(settings(null),{gate:-48,rejection:.6});assert.deepEqual(settings({gate:Infinity,rejection:'0'}),settings());assert.deepEqual(settings({gate:-999,rejection:99}),{gate:-65,rejection:1});});
 test('silence and sub-gate sounds never produce tuned strings',()=>{assert.equal(levelDb(new Float32Array(100)),-120);assert.ok(analyseSpectrum(spectrum([[0]]),48000,-80).every(s=>s.state==='quiet'));assert.ok(analyseSpectrum(new Float32Array(FFT_SIZE/2).fill(-Infinity),48000,-20).every(s=>s.state==='quiet'));});
 for(const rate of [44100,48000])for(let i=0;i<6;i++)for(const cents of [-30,0,30])test(`${rate} Hz: string ${i}, detuned ${cents} cents`,()=>{const result=analyseSpectrum(spectrum([[i,cents]],rate),rate,-20)[i];assert.equal(result.state,cents<0?'flat':cents>0?'sharp':'tuned');assert.ok(Math.abs(result.cents-cents)<1);});
