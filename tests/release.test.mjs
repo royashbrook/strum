@@ -20,12 +20,15 @@ test('release contains a complete versioned module graph, stable install identit
     }
     const manifest = JSON.parse(await readFile(resolve(destination, 'manifest.json')));
     assert.equal(manifest.id, '/'); assert.equal(manifest.start_url, '/'); assert.equal(manifest.display, 'standalone');
+    assert.equal(manifest.orientation, 'any');
+    assert.ok(!sw.includes('"/_headers"'), 'deployment headers must never enter the service-worker precache');
     for (const [file, size] of [['icon-180.png', 180], ['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
       const png = await readFile(resolve(destination, file));
       assert.equal(png.readUInt32BE(16), size); assert.equal(png.readUInt32BE(20), size);
     }
     const headers = await readFile(resolve(destination, '_headers'), 'utf8');
     assert.match(headers, /microphone=\(self\)/); assert.match(headers, /\/version\.json\n  Cache-Control: no-store/);
+    for (const route of ['/', '/index.html', '/sw.js']) assert.ok(headers.includes(`${route}\n  Cache-Control: no-store`));
     assert.equal(JSON.parse(await readFile(resolve(destination, 'version.json'))).build, id);
     const changed = await build(resolve('public'), destination, '0.1.2'); assert.notEqual(id, changed);
   } finally { await rm(destination, { recursive: true, force: true }); }

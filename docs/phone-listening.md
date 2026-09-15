@@ -12,6 +12,16 @@ The raw input meter is before pitch rejection. About shows only reported process
 
 Real iPhone/nylon capture is not verified by these browser tests. Voice/hum discrimination and full polyphonic overlap remain open in #1. No automatic recording, upload or microphone restart is added.
 
+## v0.1.5 review follow-up (refs #9)
+
+A synthesized low-E pluck filtered through six 300 Hz high-pass stages exposed a false B: the missing fundamental prevented the original overlap guard from running. The detector now checks for two other audible partials supporting an implied lower string, even if that lower fundamental is absent. Those partials must be distinct from the candidate's own harmonics and pass the existing local-noise prominence test. The result is uncertain regardless of filter sensitivity. This is conservative ambiguity handling, not source recognition; a fully isolated overtone with no other evidence remains indistinguishable here from a real note.
+
+The regression sweeps 44.1/48 kHz, ten seeds, three detunings and four filter settings. Genuine filtered B/high E and the existing quiet overtone-light decays are controls. An actual app test verifies no ghost-green latch, followed by acquisition and fade memory for a real quiet B. Alternating tuned/quiet or tuned/uncertain readings now explicitly test that only consecutive frames can latch green.
+
+Humming still qualifies as pitch evidence in the isolated path. Requiring decay is only a hypothesis and is not shipped: it needs attack/sustain controls before risking the quiet-string improvement. Real recordings, voice/hum discrimination and final accuracy acceptance remain on #1.
+
+The release check pins `_headers` exclusion from the worker precache. HTML and worker entry points request no-store, and the manifest explicitly allows either orientation without changing app identity. CSP is unchanged; the blocked injected analytics beacon still needs a host-level decision.
+
 ## interface audit and decisions
 
 Targeted evolution of the existing rounded charcoal/green interface, not a new marketing design. Preserve #15171a background, #3ddc84 tuned-green, system rounded type, six strings and explanatory motion. Design variance/motion/density: 3/4/3, preserving the symmetric instrument and keeping motion for readings only. No new visual assets or framework.

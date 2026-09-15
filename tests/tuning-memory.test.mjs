@@ -32,6 +32,17 @@ test('fresh low or high readings immediately clear saved green', () => {
     assert.equal(rememberTuning([reading('quiet')], memory)[0].state, 'quiet');
   }
 });
+test('interrupted in-tune frames never accumulate into a saved green', () => {
+  for (const interruption of ['quiet', 'uncertain']) {
+    const memory = [];
+    for (const state of ['tuned', interruption, 'tuned', interruption, 'tuned', interruption]) {
+      const result = rememberTuning([reading(state, state === 'tuned' ? 0 : null)], memory)[0];
+      assert.notEqual(result.state, 'tuned'); assert.equal(result.held, false);
+    }
+    for (let i = 0; i < 3; i++) rememberTuning([reading('tuned', 0)], memory);
+    assert.equal(rememberTuning([reading('quiet')], memory)[0].held, true);
+  }
+});
 test('six strings can be tuned one at a time; a fresh session starts empty', () => {
   const memory = [];
   for (let string = 0; string < 6; string++) {
