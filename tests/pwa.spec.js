@@ -101,3 +101,21 @@ test('iPhone install explains the real Safari flow; installed mode hides it', as
     await context.close();
   }
 });
+
+test('a first worker reported as waiting and controlling is not a new version', async ({ page }) => {
+  await page.addInitScript(() => {
+    const worker = { postMessage(message, ports) {
+      if (message.type === 'VERSION') ports[0].postMessage({ build: document.querySelector('meta[name="strum-build"]').content });
+    } };
+    const registration = { waiting: worker, active: worker, update: async () => {}, addEventListener() {} };
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: {
+      controller: worker, register: async () => registration, addEventListener() {},
+    } });
+  });
+  await page.goto(origin); await page.locator('#nav-about').click();
+  await expect(page.locator('#update-status')).toHaveText('Saved for offline use.');
+  await expect(page.locator('#update-notice')).toBeHidden();
+  await page.locator('#check-update').click();
+  await expect(page.locator('#update-status')).toHaveText('Saved for offline use.');
+  await expect(page.locator('#update-notice')).toBeHidden();
+});

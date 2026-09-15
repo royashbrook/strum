@@ -3,20 +3,27 @@ export function wirePwa(beforeUpdate) {
   const $ = id => document.getElementById(id), status = $('update-status');
   const boot = document.querySelector('meta[name="strum-build"]').content;
   let registration, applying = false, checking = false, dismissed = false;
-  function activeBuild() {
+  function workerBuild(worker) {
     return new Promise((resolve, reject) => {
       const channel = new MessageChannel();
       const timeout = setTimeout(() => { channel.port1.close(); reject(new Error('No worker response')); }, 4000);
       channel.port1.onmessage = event => { clearTimeout(timeout); channel.port1.close(); resolve(event.data?.build); };
-      registration.active?.postMessage({ type: 'VERSION' }, [channel.port2]);
+      worker?.postMessage({ type: 'VERSION' }, [channel.port2]);
     });
   }
   const ready = () => { $('update-notice').hidden = dismissed; status.textContent = 'Update downloaded. Ready when you are.'; };
+  async function offerWaiting(worker) {
+    // WebKit can briefly report its first installed worker as both waiting and
+    // controlling. Compare build identities, not the timing of those properties.
+    const id = await workerBuild(worker);
+    if (/^[a-f0-9]{12}$/.test(id) && id !== boot) ready();
+    else status.textContent = 'Saved for offline use.';
+  }
   const watch = worker => {
     if (!worker) return;
     worker.addEventListener('statechange', () => {
       if (worker.state === 'installed') {
-        if (registration.waiting && navigator.serviceWorker.controller) ready();
+        if (registration.waiting) void offerWaiting(registration.waiting).catch(() => {});
         else status.textContent = 'Saved for offline use.';
       } else if (worker.state === 'redundant') status.textContent = 'Download failed. Try checking again when online.';
     });
@@ -31,11 +38,11 @@ export function wirePwa(beforeUpdate) {
       const latest = await receipt.json();
       if (!/^[a-f0-9]{12}$/.test(latest.build)) throw new Error('Invalid version');
       await registration.update();
-      if (registration.waiting && navigator.serviceWorker.controller) ready();
+      if (registration.waiting) await offerWaiting(registration.waiting);
       else if (registration.installing) status.textContent = 'Downloading update…';
       else {
         // Another open tab may already have activated the new worker.
-        const active = await activeBuild();
+        const active = await workerBuild(registration.active);
         if (active === latest.build && active !== boot) ready();
         else status.textContent = 'You’re up to date.';
       }
@@ -58,7 +65,7 @@ export function wirePwa(beforeUpdate) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
       registration = reg; watch(reg.installing);
       reg.addEventListener('updatefound', () => watch(reg.installing));
-      if (reg.waiting && navigator.serviceWorker.controller) ready();
+      if (reg.waiting) void offerWaiting(reg.waiting).catch(() => {});
       void check();
     }).catch(() => { status.textContent = 'Offline installation unavailable. The tuner still works online.'; $('check-update').disabled = true; });
     setInterval(check, 60_000);
