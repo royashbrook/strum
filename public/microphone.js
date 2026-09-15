@@ -1,4 +1,5 @@
-import { FFT_SIZE, analyseSpectrum, levelDb } from './analysis.js';
+import { FFT_SIZE, levelDb } from './analysis.js';
+import { followResonance } from './resonance.js';
 
 export class Microphone {
   constructor(onFrame, onState, options) {
@@ -27,6 +28,7 @@ export class Microphone {
       const analyser = context.createAnalyser(); analyser.fftSize = FFT_SIZE; analyser.smoothingTimeConstant = 0;
       const source = context.createMediaStreamSource(stream); source.connect(analyser); this.source = source;
       const spectrum = new Float32Array(analyser.frequencyBinCount), samples = new Float32Array(FFT_SIZE);
+      const resonance = [];
       this.onState('listening', 'Strum gently. Let the strings ring.');
       for (const track of stream.getTracks()) track.addEventListener('ended', () => {
         if (generation === this.generation) this.stop('Microphone disconnected. Tap listen to try again.');
@@ -38,7 +40,7 @@ export class Microphone {
       this.timer = setInterval(() => {
         analyser.getFloatFrequencyData(spectrum); analyser.getFloatTimeDomainData(samples);
         const volume = levelDb(samples);
-        this.onFrame(analyseSpectrum(spectrum, context.sampleRate, volume, this.options()), volume, { ...capture, sampleRate: context.sampleRate });
+        this.onFrame(followResonance(spectrum, context.sampleRate, volume, this.options(), resonance, performance.now()), volume, { ...capture, sampleRate: context.sampleRate });
       }, 90);
     } catch (error) {
       if (generation !== this.generation) return;

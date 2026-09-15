@@ -44,10 +44,11 @@ test('low/high labels and open listening settings fit small screens', async ({ p
   await expect(page.locator('.string').nth(4).locator('.reading')).toHaveText('high');
   for (const size of [{width:360,height:640},{width:430,height:932}]) {
     await page.setViewportSize(size);
+    await page.locator('#settings').evaluate(node=>{node.open=true;});
+    await page.locator('#precision').check();
     for (const selector of ['.reading', '.reading-detail']) {
       expect(await page.locator(selector).evaluateAll(nodes => nodes.every(node => node.scrollWidth <= node.clientWidth))).toBe(true);
     }
-    await page.locator('#settings').evaluate(node=>{node.open=true;});
     for (const id of ['listen','gate','rejection']) {
       const box = await page.locator('#'+id).boundingBox(); expect(box.y + box.height).toBeLessThanOrEqual(size.height);expect(box.height).toBeGreaterThanOrEqual(44);
     }
