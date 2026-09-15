@@ -14,9 +14,13 @@ test('release contains a complete versioned module graph, stable install identit
     assert.ok(!/BUILD_ID|APP_VERSION|PRECACHE_ASSETS/.test(html + sw));
     assert.ok(html.includes(`/assets/${id}/app.js`));
     assert.ok(html.includes(`/assets/${id}/app.css`));
-    for (const name of ['app.js', 'pwa.js', 'analysis.js', 'microphone.js', 'tuning-memory.js', 'app.css']) {
+    for (const name of ['app.js', 'pwa.js', 'analysis.js', 'microphone.js', 'tuning-memory.js', 'resonance.js', 'pitch-motion.js', 'app.css']) {
       assert.ok(sw.includes(`/assets/${id}/${name}`));
       assert.ok((await readFile(resolve(destination, 'assets', id, name))).length);
+    }
+    for (const name of ['thumb-up.svg', 'third-party.txt']) {
+      assert.ok(sw.includes('/' + name));
+      assert.ok((await readFile(resolve(destination, name))).length);
     }
     const manifest = JSON.parse(await readFile(resolve(destination, 'manifest.json')));
     assert.equal(manifest.id, '/'); assert.equal(manifest.start_url, '/'); assert.equal(manifest.display, 'standalone');

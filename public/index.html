@@ -8,19 +8,19 @@
 <header><h1>strum<span>.</span></h1><div class="header-right"><span id="header-version">vAPP_VERSION</span><button id="nav-about" class="text-button">about</button><button id="nav-tuner" class="text-button" hidden>back</button></div></header>
 <section id="tuner" aria-label="Guitar tuner">
 <div class="intro"><h2>six strings. one strum.</h2><p id="status" role="status">Tap listen, then strum or pluck a string.</p></div>
-<div id="instrument"><canvas aria-hidden="true"></canvas><div id="readings" aria-label="String tuning readings"></div></div>
-<p class="guidance"><span>low ↑<small>tighten gently</small></span><span>green ✓<small>in tune</small></span><span>high ↓<small>loosen gently</small></span></p>
+<div id="instrument"><div class="landing-line" aria-hidden="true"></div><div id="readings" aria-label="String tuning readings"></div></div>
+<p class="guidance">bring each marker to the middle.</p>
 <button id="listen">listen</button>
 <details id="settings"><summary>listening settings</summary>
 <div id="input-signal" hidden><span id="input-label">no sound yet</span><output id="input-db" aria-live="off"></output><meter id="input-level" min="-100" max="0" value="-100" aria-label="Microphone input level"></meter></div>
 <label for="gate">sensitivity <output id="gate-label"></output></label><input id="gate" type="range" min="15" max="85" step="1"><div class="range-labels"><span>hear less</span><span>hear more</span></div>
 <label class="filter-row" for="rejection">note filter<select id="rejection"><option value="0.15">gentle</option><option value="0.35">balanced</option><option value="0.75">strict</option></select></label>
+<label class="precision-row" for="precision"><span>show numbers</span><input id="precision" type="checkbox"></label>
 </details>
-<p class="footnote">“last ✓” remembers a tuned string as it fades</p>
 <aside id="install-coach" hidden><button id="install-shortcut" class="text-button">add to home screen</button><button id="dismiss-install" class="text-button" aria-label="Dismiss home screen tip">not now</button></aside>
 </section>
 <section id="about" hidden><h2 id="about-title" tabindex="-1">a little room to tune.</h2>
-<p>Standard E A D G B E. A4 = 440 Hz.</p><p>Low: tighten gently. High: loosen gently. Green: in tune.</p><p>“last ✓” remembers the last confirmed tuning. Each new listening session starts fresh. If strings overlap or show ?, try plucking them one at a time.</p>
+<p>Standard E A D G B E. A4 = 440 Hz.</p><p>Below the middle: tighten gently. Above: loosen gently. A green thumbs-up means in tune.</p><p>A hollow green thumbs-up remembers the last confirmed tuning as the sound fades. Each new listening session starts fresh. A dotted marker means the pitch is unclear; try plucking that string on its own. Turn on “show numbers” in listening settings for cents.</p>
 <p>Audio stays on this device, never recorded or uploaded. Listening stops when you leave the tuner or switch apps.</p><p>No ads. No accounts. Nothing to buy.</p>
 <details><summary>microphone details</summary><p id="mic-details">Tap listen to check the microphone.</p><p>On iPhone, if Mic Mode is available, choose Wide Spectrum instead of Voice Isolation. <a href="https://support.apple.com/en-us/101993">Apple’s mic settings</a></p></details>
 <p class="mark">made with love by <a href="https://royashbrook.com">roy</a> + <a href="https://royashbrook.com/agents">ai</a> · <a href="https://github.com/sponsors/royashbrook">sponsor me</a></p>
