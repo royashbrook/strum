@@ -40,7 +40,7 @@ export class Microphone {
       this.timer = setInterval(() => {
         analyser.getFloatFrequencyData(spectrum); analyser.getFloatTimeDomainData(samples);
         const volume = levelDb(samples);
-        this.onFrame(followResonance(spectrum, context.sampleRate, volume, this.options(), resonance, performance.now()), volume, { ...capture, sampleRate: context.sampleRate });
+        this.onFrame(followResonance(spectrum, context.sampleRate, volume, this.options(), resonance, performance.now(), samples), volume, { ...capture, sampleRate: context.sampleRate });
       }, 90);
     } catch (error) {
       if (generation !== this.generation) return;

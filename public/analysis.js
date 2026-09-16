@@ -114,3 +114,60 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
   }
   return output;
 }
+
+// The analyser window is 683 ms at 48 kHz, so a peg turn is smeared across two thirds of a
+// second before the FFT peak settles. Given the peak's frequency, the phase advance of that
+// tone between two adjacent segments at the end of the same buffer gives the pitch of the
+// last 341 ms to well under a cent, and follows a turn about twice as fast.
+//
+// The advance is unambiguous only within half the segment rate of the starting guess, which
+// at 8192 samples is 15 cents at high E, less than a peg turn moves in a third of a second.
+// So three stage lengths estimate in turn, each from the last. The lengths are commensurate,
+// so agreement alone cannot rule out a shared alias (a residual of one segment rate at 2048
+// wraps by one, two and four whole turns); what is checked is agreement within 10 cents
+// together with real energy at the answer. While the buffer holds two pitches the stages
+// disagree, and a wrapped estimate sits in the sidelobes with a fraction of the energy.
+// Anything else keeps the FFT reading. In the sweeps run no accepted refinement pointed
+// the wrong way; that is finite coverage, not a guarantee.
+export function refineHz(samples, hz, sampleRate, peakDb, L = 8192) {
+  if (!samples || samples.length < 2 * L || !(hz > 0) || !Number.isFinite(peakDb)) return null;
+  // One rotating phasor per segment: four multiplies a sample instead of two trigonometric
+  // calls, so a frame costs well under a millisecond.
+  const segment = (f, start, length) => {
+    const step = 2 * Math.PI * f / sampleRate, cs = Math.cos(step), sn = Math.sin(step), ws = 2 * Math.PI / length, wc = Math.cos(ws), wsn = Math.sin(ws);
+    let re = 0, im = 0, pr = 1, pi = 0, hr = 1, hi = 0;
+    for (let n = start; n < start + length; n++) {
+      const v = samples[n] * (0.5 - 0.5 * hr);
+      re += v * pr; im -= v * pi;
+      const npr = pr * cs - pi * sn; pi = pr * sn + pi * cs; pr = npr;
+      const nhr = hr * wc - hi * wsn; hi = hr * wsn + hi * wc; hr = nhr;
+    }
+    return [re, im];
+  };
+  const estimates = [];
+  let f = hz;
+  for (const length of [L / 4, L / 2, L]) {
+    const [r1, i1] = segment(f, samples.length - 2 * length, length), [r2, i2] = segment(f, samples.length - length, length);
+    if (Math.hypot(r1, i1) < 1e-9 || Math.hypot(r2, i2) < 1e-9) return null;
+    const advance = Math.atan2(i2 * r1 - r2 * i1, r2 * r1 + i2 * i1) - (2 * Math.PI * f * length / sampleRate) % (2 * Math.PI);
+    f += Math.atan2(Math.sin(advance), Math.cos(advance)) / (2 * Math.PI * length / sampleRate);
+    estimates.push(f);
+  }
+  if (1200 * Math.log2(Math.max(...estimates) / Math.min(...estimates)) > 10 || Math.abs(1200 * Math.log2(f / hz)) >= 250) return null;
+  // Hann over L samples reads a sine of amplitude A as A*L/4; the analyser's Blackman
+  // spectrum reads it as 20*log10(0.21*A). A wrapped or vanished tone leaves a fraction.
+  const [r, i] = segment(f, samples.length - L, L);
+  return 4 * Math.hypot(r, i) / L >= 0.35 * 10 ** (peakDb / 20) / 0.21 ? f : null;
+}
+
+// Only a measured string is refined, so refinement can never turn uncertainty into evidence,
+// and measuredHz, cents and state always move together.
+export function refineReadings(readings, samples, sampleRate) {
+  return readings.map(s => {
+    if (!['flat', 'sharp', 'tuned'].includes(s.state) || !s.measuredHz) return s;
+    const hz = refineHz(samples, s.measuredHz, sampleRate, s.peakDb);
+    if (hz == null) return s;
+    const cents = 1200 * Math.log2(hz / s.hz);
+    return { ...s, measuredHz: hz, cents, state: Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
+  });
+}
