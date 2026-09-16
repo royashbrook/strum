@@ -20,15 +20,18 @@ unchanged strings. An active microphone stays open; changing settings never star
 
 The detector searches within 250 cents so changing a string by a whole tone gives
 direction before it is close. A peak belongs only to the nearest target, with a
-30-cent separation margin: a pitch midway between neighbouring targets remains
-unassigned. It cannot identify which physical string produced such an ambiguous
-pitch. The five-cent green tolerance, raw-peak isolation and harmonic ambiguity
+30-cent separation margin: the unassigned band is 30 cents wide, approximately
+15 cents on either side of a midpoint between neighbouring targets. It cannot
+identify which physical string produced such an ambiguous pitch. Fretted notes,
+a capo, or a different string can now produce a confident large error against
+the nearest target; use open strings without a capo. The five-cent green tolerance, raw-peak isolation and harmonic ambiguity
 guards remain. Zero harmonic/isolation confidence never counts as a reading, even
 if a caller sets rejection to zero.
 
 Open tunings contain more exact octave/harmonic overlaps. A full strum cannot
 always distinguish upper strings from lower-string overtones; those remain
-uncertain. Plucking strings individually allows each to confirm and retain green.
+uncertain. Mute the other strings before plucking each one to confirm and retain
+green; a still-ringing bass string can keep an upper string ambiguous.
 These presets do not promise perfect six-string separation or guitar/voice classification.
 
 Checks cover independent string pitches at 44.1/48 kHz, flat/tuned/sharp readings,
@@ -36,3 +39,10 @@ standard-to-preset retuning, faint fundamentals, noise, single-pluck ghosts, ful
 ambiguity, midpoint refusal, resonance reset, active microphone continuity, saved
 selection, blocked storage, narrow/landscape layouts and consented offline PWA updates.
 Generated audio and browser tests are not a physical-phone guitar accuracy claim.
+
+The native fading-stream browser fixture holds a -68 dB peak sine, measured at
+-71 dB RMS, inside the noisy preset's -73..-55 dB continuation band. It also checks
+rejection at -81 dB RMS. The old -72 dB peak target settled at -75 dB RMS, below
+the continuation floor, so a successful assertion depended on catching its brief
+transition through the band. Both browser engines reproduced that distinction;
+the fixture is corrected without changing capture, timing or detector thresholds.
