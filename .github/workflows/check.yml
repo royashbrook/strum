@@ -19,6 +19,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: npm run test:mutations
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
       - run: npm run test:edge
