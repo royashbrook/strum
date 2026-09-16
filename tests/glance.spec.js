@@ -73,23 +73,24 @@ test('native audio continues a real decaying stream below the user gate without 
   });
   await page.goto('/');await page.locator('#nav-settings').click();await page.getByRole('radio',{name:'Noisy room'}).check();await page.locator('#listen').click();const a=page.locator('.string').nth(1);
   await expect(a).toHaveAttribute('data-state','flat');
+  await expect(a.locator('.reading-detail')).toHaveText('↑ 20¢');
   // Sine RMS is 3 dB below peak gain. Read each settled level in the page,
   // without assertion polling consuming the 2500 ms continuation window.
   // The second refusal must be the -73 dB floor, not expired history.
   const readings=await page.evaluate(async()=>{
     const string=document.querySelectorAll('.string')[1],meter=document.querySelector('#input-db');
     const started=performance.now(),readings=[];
-    for(const [peak,db] of [[-68,'-71 dB'],[-78,'-81 dB']]){
+    for(const [peak,db,detail] of [[-68,'-71 dB','↑ 20¢'],[-78,'-81 dB',null]]){
       decayAudio.gain.gain.setTargetAtTime(10**(peak/20),decayAudio.context.currentTime,.01);
-      while(meter.textContent!==db&&performance.now()-started<2000)
+      while((meter.textContent!==db||(detail&&string.querySelector('.reading-detail').textContent!==detail))&&performance.now()-started<2000)
         await new Promise(requestAnimationFrame);
       readings.push({db:meter.textContent,state:string.dataset.state,tracking:string.dataset.tracking,
         detail:string.querySelector('.reading-detail').textContent,elapsed:performance.now()-started});
     }
     return readings;
   });
-  expect(readings[0]).toMatchObject({db:'-71 dB',state:'flat',tracking:'true',detail:'↑ 20¢'});
-  expect(readings[1]).toMatchObject({db:'-81 dB',state:'quiet',tracking:'false'});
+  expect(readings[0],JSON.stringify(readings)).toMatchObject({db:'-71 dB',state:'flat',tracking:'true',detail:'↑ 20¢'});
+  expect(readings[1],JSON.stringify(readings)).toMatchObject({db:'-81 dB',state:'quiet',tracking:'false'});
   expect(readings[1].elapsed).toBeLessThan(2000);
   await page.evaluate(()=>{decayAudio.gain.gain.cancelScheduledValues(decayAudio.context.currentTime);decayAudio.gain.gain.value=0;});await expect(a).toHaveAttribute('data-state','quiet');
   await page.locator('#listen').click();await page.evaluate(()=>decayAudio.context.close());

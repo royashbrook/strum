@@ -53,3 +53,6 @@ polling until refusal could be caused by the 2.5-second history expiry. Eight
 repeats passed across Chromium and WebKit. Intercepting only the test's resonance
 module and replacing the continuation floor with -115 dB makes both engines fail
 at the -81 dB assertion: the mutant reports flat/tracking instead of quiet.
+Acquisition and the in-band snapshot also wait for the oscillator's known 20-cent
+offset. Linux WebKit produced a transient 33-cent reading at -71 dB before this
+guard: reaching the RMS level alone does not establish a settled pitch spectrum.
