@@ -7,9 +7,6 @@ on:
     types: [completed]
 permissions:
   contents: read
-concurrency:
-  group: strum-production
-  cancel-in-progress: true
 jobs:
   deploy:
     if: >-
@@ -18,22 +15,27 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
+    concurrency:
+      group: strum-production
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # A late completion must never select an older release. Every eligible
+          # run validates current main itself, including runs queued out of order.
+          ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run check
       - run: npm test
       - run: npm run build
-      - if: github.event_name == 'workflow_dispatch'
-        run: npx playwright install --with-deps chromium webkit
-      - if: github.event_name == 'workflow_dispatch'
-        run: npm run test:browser
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser
       - name: Refuse a superseded release
         run: |
           git fetch origin main

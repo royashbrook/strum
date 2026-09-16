@@ -10,7 +10,7 @@ The settings-only native picker offers four six-string presets, low to high:
 | Open G | D2 G2 D3 G3 B3 D4 |
 
 Targets are equal-tempered MIDI frequencies referenced to A4 = 440 Hz, defined once
-in `public/tunings.js`. [Fender's tuning guide](https://www.fender.com/articles/setup/tune-like-a-rock-star)
+in `src/lib/tunings.ts`. [Fender's tuning guide](https://www.fender.com/articles/setup/tune-like-a-rock-star)
 and [Open D lesson](https://www.fender.com/articles/setup/open-d-tuning) document the note sets.
 
 `strum.tuning.v1` stores only the preset id. Missing, invalid or unavailable storage

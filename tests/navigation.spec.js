@@ -7,7 +7,7 @@ test('three named icon controls, separate settings, absolute top-right version o
   await fakeMic(page);await page.goto('/');
   await expect(page.locator('#settings')).toBeHidden();await expect(page.locator('#tuner #settings, .guidance')).toHaveCount(0);
   expect(await page.locator('#listen-label').evaluate(n=>getComputedStyle(n).clipPath)).toBe('inset(50%)');
-  for(const size of [{width:360,height:640},{width:430,height:932},{width:932,height:430},{width:1200,height:800}]){
+  for(const size of [{width:360,height:640},{width:390,height:844},{width:414,height:896},{width:430,height:932},{width:932,height:430},{width:1200,height:800}]){
     await page.setViewportSize(size);
     for(const view of ['tuner','settings','about']){
       if(view==='tuner')await page.keyboard.press('Escape');
@@ -19,7 +19,15 @@ test('three named icon controls, separate settings, absolute top-right version o
           for(const string of await page.locator('.string').all()){
             const rail=await string.locator('.rail').boundingBox(),label=await string.locator('.note-label').boundingBox();
             expect(label.y-(rail.y+rail.height),'note labels clear the rail end in both display modes').toBeGreaterThanOrEqual(8);
+            const bead=await string.locator('.bead').boundingBox();
+            for(const box of [rail,label,bead]){
+              expect(box.x,'every string is wholly inside the viewport').toBeGreaterThanOrEqual(0);
+              expect(box.x+box.width,'including the entire high-E bead').toBeLessThanOrEqual(size.width);
+            }
           }
+          const title=await page.locator('.intro h2').evaluate(n=>{const r=document.createRange();r.selectNodeContents(n);const b=r.getBoundingClientRect();return {left:b.left,right:b.right};});
+          expect(title.left).toBeGreaterThanOrEqual(0);expect(title.right).toBeLessThanOrEqual(size.width);
+          expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
         }
         await page.locator('#nav-settings').click();await page.locator('#precision').uncheck();await page.keyboard.press('Escape');
       }

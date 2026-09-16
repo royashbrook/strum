@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {STRINGS, FFT_SIZE, analyseSpectrum, refineHz, refineReadings} from '../public/analysis.js';
-import {followResonance} from '../public/resonance.js';
-import {listeningProfiles} from '../public/listening.js';
+import {Microphone} from '../src/lib/microphone.ts';
+import {STRINGS, FFT_SIZE, analyseSpectrum, refineHz, refineReadings} from '../src/lib/analysis.ts';
+import { followResonance, createHistory } from '../src/lib/resonance.ts';
+import {listeningProfiles} from '../src/lib/listening.ts';
 import {audioFixture, sampleFixture} from './waveform.js';
 
 const measured = s => ['flat','sharp','tuned'].includes(s.state);
@@ -80,7 +80,7 @@ test('an onset is refined once the tone fills the last segments, and a vanished 
 test('the continuation path uses the refined pitch for state, and only for measured strings', () => {
   const rate = 48000, i = 1, x = (() => { const y = new Float32Array(rate * 2); let phase = .3; for (let n = 0; n < y.length; n++) { phase += 2 * Math.PI * STRINGS[i].hz * 2 ** ((n / rate < 1 ? -14 : 0) / 1200) / rate; y[n] = .01 * Math.sin(phase); } return y; })();
   const end = Math.round(1.3 * rate), f = sampleFixture(x.slice(end - FFT_SIZE, end), rate);
-  const without = followResonance(f.spectrum, rate, f.rms, cfg, [], 0)[i], withSamples = followResonance(f.spectrum, rate, f.rms, cfg, [], 0, f.samples)[i];
+  const without = followResonance(f.spectrum, rate, f.rms, cfg, createHistory(), 0)[i], withSamples = followResonance(f.spectrum, rate, f.rms, cfg, createHistory(), 0, f.samples)[i];
   assert.equal(without.state, 'flat'); assert.equal(withSamples.state, 'tuned');
   assert.equal(Math.abs(withSamples.cents) <= 5, true); assert.equal(withSamples.measuredHz, STRINGS[i].hz * 2 ** (withSamples.cents / 1200));
   // uncertainty is pinned from the INPUT: a row that is uncertain going in, peak and all,
@@ -92,7 +92,34 @@ test('the continuation path uses the refined pitch for state, and only for measu
   before.forEach((s, i) => { if (!measured(s)) assert.deepEqual(after[i], s, JSON.stringify({i, before: s, after: after[i]})); });
 });
 
-test('the capture loop hands the buffer it already reads to the continuation path', async () => {
-  const source = await readFile(new URL('../public/microphone.js', import.meta.url), 'utf8');
-  assert.match(source, /followResonance\([^;]*performance\.now\(\), samples\)/);
+test('the capture loop refines from the same sampled buffer and releases its resources', async t => {
+  const rate = 48000, x = stepped(rate, STRINGS[1].hz, 30);
+  const end = Math.round(1.3 * rate), f = sampleFixture(x.slice(end - FFT_SIZE, end), rate);
+  const expected = followResonance(f.spectrum, rate, f.rms, cfg, createHistory(), 0, f.samples);
+  const without = followResonance(f.spectrum, rate, f.rms, cfg, createHistory(), 0);
+  assert.ok(Math.abs(expected[1].cents - without[1].cents) > 5, 'buffer forwarding changes the measured pitch');
+  let tick, output, stopped = 0, closed = 0, disconnected = 0, cleared = 0;
+  const track = {stop() { stopped++; }, addEventListener() {}, getSettings() { return {}; }};
+  class AudioContext {
+    state = 'running'; sampleRate = rate;
+    async resume() {} async close() { closed++; }
+    addEventListener() {}
+    createMediaStreamSource() { return {connect() {}, disconnect() { disconnected++; }}; }
+    createAnalyser() { return {frequencyBinCount: FFT_SIZE / 2,
+      getFloatFrequencyData(a) { a.set(f.spectrum); },
+      getFloatTimeDomainData(a) { a.set(f.samples); },
+    }; }
+  }
+  for(const [key,value] of Object.entries({AudioContext, window:{AudioContext}, navigator:{mediaDevices:{async getUserMedia() { return {getTracks:()=>[track]}; }}}})) {
+    const original = Object.getOwnPropertyDescriptor(globalThis,key);
+    Object.defineProperty(globalThis,key,{configurable:true,writable:true,value});
+    t.after(()=>{if(original)Object.defineProperty(globalThis,key,original);else delete globalThis[key];});
+  }
+  t.mock.method(globalThis,'setInterval',fn=>{tick=fn;return 17;});
+  t.mock.method(globalThis,'clearInterval',id=>{assert.equal(id,17);cleared++;});
+  const mic = new Microphone(readings=>{output=readings;},()=>{},()=>cfg);
+  await mic.start(); tick();
+  assert.deepEqual(output,expected);
+  mic.stop();
+  assert.deepEqual({stopped,closed,disconnected,cleared},{stopped:1,closed:1,disconnected:1,cleared:1});
 });

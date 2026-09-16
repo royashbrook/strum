@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {analyseSpectrum} from '../public/analysis.js';
-import {listeningProfile,listeningProfiles} from '../public/listening.js';
+import {analyseSpectrum} from '../src/lib/analysis.ts';
+import {listeningProfile,listeningProfiles} from '../src/lib/listening.ts';
 import {audioFixture} from './waveform.js';
 
 test('plain listening presets migrate intent and reject malformed saved choices',()=>{

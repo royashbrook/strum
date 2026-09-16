@@ -1,4 +1,4 @@
-import { FFT_SIZE, STRINGS } from '../public/analysis.js';
+import { FFT_SIZE, STRINGS } from '../src/lib/analysis.ts';
 import { sampleFixture } from './waveform.js';
 
 // A decaying pluck followed by cascaded first-order high-pass filters. This is

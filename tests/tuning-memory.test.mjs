@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rememberTuning } from '../public/tuning-memory.js';
+import { rememberTuning } from '../src/lib/tuning-memory.ts';
 const reading = (state, cents = null) => ({ state, cents, level: 1, confidence: 1 });
 
 test('silence and uncertainty cannot invent a tuned string', () => {

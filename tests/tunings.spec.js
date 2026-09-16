@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {fakeMic} from './microphone-fixture.js';
 import {audioFixture} from './waveform.js';
-import {TUNINGS} from '../public/tunings.js';
+import {TUNINGS} from '../src/lib/tunings.ts';
 
 async function signal(page,hz,db=-45){
   const f=audioFixture({frequencies:[hz],db,noise:-110});

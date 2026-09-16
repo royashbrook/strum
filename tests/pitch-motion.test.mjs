@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {easePitch} from '../public/pitch-motion.js';
+import {easePitch} from '../src/lib/pitch-motion.ts';
 test('pitch glides to the target without a jump or overshoot',()=>{
   const m={value:-40,velocity:0};let last=m.value;
   for(let i=0;i<60;i++){

@@ -5,17 +5,20 @@ import { tmpdir } from 'node:os';
 import { resolve, extname, sep } from 'node:path';
 import { build } from '../scripts/build.mjs';
 import { fakeMic } from './microphone-fixture.js';
+import { legacyBuild } from './legacy-release.js';
 
-let directory, server, origin, root, first, second, breakDownload, networkDown;
+let directory, server, origin, root, nextRoot, first, second, breakDownload, networkDown;
+const builds = {};
 test.beforeAll(async () => {
   directory = await mkdtemp(resolve(tmpdir(), 'strum-pwa-'));
-  first = await build(resolve('public'), resolve(directory, 'a'), '0.1.0');
-  second = await build(resolve('public'), resolve(directory, 'b'), '0.1.1');
+  builds.a = await legacyBuild(resolve(directory, 'a'));
+  builds.b = await build(process.cwd(), resolve(directory, 'b'), '1.0.0');
+  builds.c = await build(process.cwd(), resolve(directory, 'c'), '1.0.1');
   server = createServer(async (request, response) => {
     if (networkDown) { request.socket.destroy(); return; }
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
-      if (breakDownload && pathname.endsWith('/analysis.js')) { response.writeHead(503).end(); return; }
+      if (breakDownload && pathname.startsWith('/assets/') && pathname.endsWith('.js')) { response.writeHead(503).end(); return; }
       const base = resolve(directory, root), file = resolve(base, '.' + (pathname === '/' ? '/index.html' : pathname));
       if (!file.startsWith(base + sep)) { response.writeHead(403).end(); return; }
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -41,6 +44,12 @@ async function boot(page) {
   await expect(page.locator('#update-notice')).toBeHidden();
 }
 
+for (const base of ['a', 'b']) test.describe(base === 'a' ? 'installed v0.1.10' : 'Svelte release', () => {
+test.beforeEach(() => {
+  root = base; nextRoot = base === 'a' ? 'b' : 'c';
+  first = builds[base]; second = builds[nextRoot];
+});
+
 test('installed shell survives network loss and all about links own 44px targets', async ({ page, context, browserName }) => {
   await boot(page);
   await disconnect(context, browserName); await page.reload({ waitUntil: 'domcontentloaded' });
@@ -60,7 +69,7 @@ test('real A-to-B worker update waits for consent and preserves settings', async
   await page.locator('#nav-settings').click(); await page.getByRole('radio',{name:'Noisy room'}).check(); await page.locator('#tuning').selectOption('open-d'); await page.locator('#nav-settings').click();
   await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
   await page.evaluate(() => { window.sameSession = true; });
-  root = 'b';
+  root = nextRoot;
   // Same event as returning to an installed app; no manual worker injection.
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect(page.locator('#update-notice')).toBeVisible({ timeout: 15000 });
@@ -87,7 +96,7 @@ test('real A-to-B worker update waits for consent and preserves settings', async
 });
 
 test('incomplete new release cannot activate or advertise itself as downloaded', async ({ page }) => {
-  await boot(page); root = 'b'; breakDownload = true;
+  await boot(page); root = nextRoot; breakDownload = true;
   await page.locator('#nav-about').click(); await page.locator('#check-update').click();
   await expect(page.locator('#update-status')).toContainText('Download failed', { timeout: 15000 });
   await expect(page.locator('#update-notice')).toBeHidden();
@@ -130,4 +139,5 @@ test('a first worker reported as waiting and controlling is not a new version', 
   await page.locator('#check-update').click();
   await expect(page.locator('#update-status')).toHaveText('Saved for offline use.');
   await expect(page.locator('#update-notice')).toBeHidden();
+});
 });

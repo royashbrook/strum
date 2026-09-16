@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {STRINGS,FFT_SIZE,analyseSpectrum,settings,levelDb} from '../public/analysis.js';
+import {STRINGS,FFT_SIZE,analyseSpectrum,settings,levelDb} from '../src/lib/analysis.ts';
 
 import { spectrum } from './spectrum.js';
 test('bounded settings tolerate missing, malformed and hostile saved values',()=>{assert.deepEqual(settings(null),{gate:-60,rejection:.35});assert.deepEqual(settings({gate:Infinity,rejection:'0'}),settings());assert.deepEqual(settings({gate:-999,rejection:99}),{gate:-85,rejection:1});});

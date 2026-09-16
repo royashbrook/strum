@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { build } from '../scripts/build.mjs';
 
 test('recovery prompts name the visible ear control', async () => {
-  for (const file of ['index.html', 'microphone.js']) {
-    const source = await readFile(resolve('public', file), 'utf8');
+  for (const file of ['src/App.svelte', 'src/lib/microphone.ts']) {
+    const source = await readFile(resolve(file), 'utf8');
     assert.equal(/tap listen/i.test(source), false, `${file}: stale control name`);
     assert.ok(source.includes('Tap the ear'), `${file}: name the visible control`);
   }
@@ -16,15 +16,18 @@ test('recovery prompts name the visible ear control', async () => {
 test('release contains a complete versioned module graph, stable install identity and microphone-safe headers', async () => {
   const destination = await mkdtemp(resolve(tmpdir(), 'strum-release-'));
   try {
-    const id = await build(resolve('public'), destination, '0.1.1');
+    const id = await build(process.cwd(), destination, '1.0.0-rc.1');
     const html = await readFile(resolve(destination, 'index.html'), 'utf8');
     const sw = await readFile(resolve(destination, 'sw.js'), 'utf8');
-    assert.ok(!/BUILD_ID|APP_VERSION|PRECACHE_ASSETS/.test(html + sw));
-    assert.ok(html.includes(`/assets/${id}/app.js`));
-    assert.ok(html.includes(`/assets/${id}/app.css`));
-    for (const name of ['app.js', 'pwa.js', 'analysis.js', 'microphone.js', 'tuning-memory.js', 'resonance.js', 'pitch-motion.js', 'listening.js', 'gestures.js', 'tunings.js', 'app.css']) {
-      assert.ok(sw.includes(`/assets/${id}/${name}`));
-      assert.ok((await readFile(resolve(destination, 'assets', id, name))).length);
+    assert.ok(!/BUILD_ID|APP_VERSION|PRECACHE_ASSETS|STRUM_BUILD/.test(html + sw));
+    assert.ok(html.includes(id));
+    const assets = await readdir(resolve(destination, 'assets'));
+    assert.ok(assets.some(name => /-[\w-]+\.js$/.test(name)), 'Vite emits fingerprinted JavaScript');
+    assert.ok(assets.some(name => name.endsWith('.css')), 'Vite emits CSS');
+    assert.ok(!assets.some(name => name.endsWith('.ts')), 'TypeScript is compiled, not served');
+    for (const name of assets) {
+      assert.ok(sw.includes(`/assets/${name}`), `${name} must be precached`);
+      assert.ok((await readFile(resolve(destination, 'assets', name))).length);
     }
     for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'guitar.svg', 'third-party.txt']) {
       assert.ok(sw.includes('/' + name));
@@ -42,6 +45,7 @@ test('release contains a complete versioned module graph, stable install identit
     assert.match(headers, /microphone=\(self\)/); assert.match(headers, /\/version\.json\n  Cache-Control: no-store/);
     for (const route of ['/', '/index.html', '/sw.js']) assert.ok(headers.includes(`${route}\n  Cache-Control: no-store`));
     assert.equal(JSON.parse(await readFile(resolve(destination, 'version.json'))).build, id);
-    const changed = await build(resolve('public'), destination, '0.1.2'); assert.notEqual(id, changed);
+    const same = await build(process.cwd(), destination, '1.0.0-rc.1'); assert.equal(id, same);
+    const changed = await build(process.cwd(), destination, '1.0.0'); assert.notEqual(id, changed);
   } finally { await rm(destination, { recursive: true, force: true }); }
 });
