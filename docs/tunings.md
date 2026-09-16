@@ -46,3 +46,10 @@ rejection at -81 dB RMS. The old -72 dB peak target settled at -75 dB RMS, below
 the continuation floor, so a successful assertion depended on catching its brief
 transition through the band. Both browser engines reproduced that distinction;
 the fixture is corrected without changing capture, timing or detector thresholds.
+
+Both drops use a 0.01-second audio time constant. The test snapshots the meter and
+string state together in the page, before two seconds have elapsed, rather than
+polling until refusal could be caused by the 2.5-second history expiry. Eight
+repeats passed across Chromium and WebKit. Intercepting only the test's resonance
+module and replacing the continuation floor with -115 dB makes both engines fail
+at the -81 dB assertion: the mutant reports flat/tracking instead of quiet.

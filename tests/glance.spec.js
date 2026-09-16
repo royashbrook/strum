@@ -73,16 +73,24 @@ test('native audio continues a real decaying stream below the user gate without 
   });
   await page.goto('/');await page.locator('#nav-settings').click();await page.getByRole('radio',{name:'Noisy room'}).check();await page.locator('#listen').click();const a=page.locator('.string').nth(1);
   await expect(a).toHaveAttribute('data-state','flat');
-  // Sine RMS is 3 dB below peak gain. Settle inside the noisy preset's
-  // -73..-55 dB tracking band; -72 peak fell below it and only passed in transit.
-  await page.evaluate(()=>decayAudio.gain.gain.setTargetAtTime(10**(-68/20),decayAudio.context.currentTime,.08));
-  await expect(page.locator('#input-db')).toHaveText('-71 dB');
-  await expect(a).toHaveAttribute('data-tracking','true');
-  await expect(a.locator('.reading-detail')).toHaveText('↑ 20¢');
-  await page.evaluate(()=>decayAudio.gain.gain.setTargetAtTime(10**(-78/20),decayAudio.context.currentTime,.08));
-  await expect(page.locator('#input-db')).toHaveText('-81 dB');
-  await expect(a).toHaveAttribute('data-state','quiet');
-  await expect(a).toHaveAttribute('data-tracking','false');
+  // Sine RMS is 3 dB below peak gain. Read each settled level in the page,
+  // without assertion polling consuming the 2500 ms continuation window.
+  // The second refusal must be the -73 dB floor, not expired history.
+  const readings=await page.evaluate(async()=>{
+    const string=document.querySelectorAll('.string')[1],meter=document.querySelector('#input-db');
+    const started=performance.now(),readings=[];
+    for(const [peak,db] of [[-68,'-71 dB'],[-78,'-81 dB']]){
+      decayAudio.gain.gain.setTargetAtTime(10**(peak/20),decayAudio.context.currentTime,.01);
+      while(meter.textContent!==db&&performance.now()-started<2000)
+        await new Promise(requestAnimationFrame);
+      readings.push({db:meter.textContent,state:string.dataset.state,tracking:string.dataset.tracking,
+        detail:string.querySelector('.reading-detail').textContent,elapsed:performance.now()-started});
+    }
+    return readings;
+  });
+  expect(readings[0]).toMatchObject({db:'-71 dB',state:'flat',tracking:'true',detail:'↑ 20¢'});
+  expect(readings[1]).toMatchObject({db:'-81 dB',state:'quiet',tracking:'false'});
+  expect(readings[1].elapsed).toBeLessThan(2000);
   await page.evaluate(()=>{decayAudio.gain.gain.cancelScheduledValues(decayAudio.context.currentTime);decayAudio.gain.gain.value=0;});await expect(a).toHaveAttribute('data-state','quiet');
   await page.locator('#listen').click();await page.evaluate(()=>decayAudio.context.close());
 });
