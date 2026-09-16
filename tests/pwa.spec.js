@@ -7,7 +7,10 @@ import { build } from '../scripts/build.mjs';
 import { fakeMic } from './microphone-fixture.js';
 import { legacyBuild } from './legacy-release.js';
 
-let directory, server, origin, root, nextRoot, first, second, breakDownload, networkDown;
+let directory, server, origin, root, nextRoot, first, second, breakDownload, networkDown, stallProbe;
+// Both the pinned release and current app allow 8 seconds before aborting a
+// stalled version fetch. Leave 2 seconds for rendering, not a shorter 5s oracle.
+const updateFailureBudget = 10_000;
 const builds = {};
 test.beforeAll(async () => {
   directory = await mkdtemp(resolve(tmpdir(), 'strum-pwa-'));
@@ -18,6 +21,7 @@ test.beforeAll(async () => {
     if (networkDown) { request.socket.destroy(); return; }
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (stallProbe && pathname === '/version.json') return;
       if (breakDownload && pathname.startsWith('/assets/') && pathname.endsWith('.js')) { response.writeHead(503).end(); return; }
       const base = resolve(directory, root), file = resolve(base, '.' + (pathname === '/' ? '/index.html' : pathname));
       if (!file.startsWith(base + sep)) { response.writeHead(403).end(); return; }
@@ -29,7 +33,7 @@ test.beforeAll(async () => {
   origin = `http://127.0.0.1:${server.address().port}`;
 });
 test.afterAll(async () => { await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); });
-test.beforeEach(() => { root = 'a'; breakDownload = false; networkDown = false; });
+test.beforeEach(() => { root = 'a'; breakDownload = false; networkDown = false; stallProbe = false; });
 async function disconnect(context, browserName) {
   // WebKit's automation offline switch aborts navigation before the worker can
   // answer on this host. Cut the actual server connection instead; no mocked SW.
@@ -59,8 +63,26 @@ test('installed shell survives network loss and all about links own 44px targets
   for (const link of await page.locator('.mark a').all()) {
     const box = await link.boundingBox(); expect(box.width).toBeGreaterThanOrEqual(44); expect(box.height).toBeGreaterThanOrEqual(44);
   }
-  await page.locator('#check-update').click(); await expect(page.locator('#update-status')).toContainText('Could not check');
+  await page.locator('#check-update').click(); await expect(page.locator('#update-status')).toContainText('Could not check', { timeout: updateFailureBudget });
   await expect(page.locator('#update-notice')).toBeHidden();
+});
+
+test('a stalled version request reaches its deadline and permits a retry', async ({ page }) => {
+  await boot(page);
+  await page.locator('#nav-about').click();
+  const button = page.locator('#check-update'), status = page.locator('#update-status');
+  await expect(button).toBeEnabled();
+  stallProbe = true;
+  const started = Date.now();
+  await button.click();
+  await expect(status).toHaveText('Checking…');
+  await expect(status).toContainText('Could not check', { timeout: updateFailureBudget });
+  expect(Date.now() - started).toBeGreaterThanOrEqual(7000);
+  await expect(button).toBeEnabled();
+  await expect(page.locator('#update-notice')).toBeHidden();
+  stallProbe = false;
+  await button.click();
+  await expect(status).toHaveText('You’re up to date.');
 });
 
 test('real A-to-B worker update waits for consent and preserves settings', async ({ page, context, browserName }) => {
