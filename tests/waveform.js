@@ -36,5 +36,5 @@ export function sampleFixture(samples, rate = 48000) {
       real[b] = real[a] - r; imag[b] = imag[a] - m; real[a] += r; imag[a] += m;
     }
   }
-  return { rate, rms: levelDb(samples), spectrum: Float32Array.from(real.subarray(0, n / 2), (r, i) => 20 * Math.log10(Math.max(1e-12, Math.hypot(r, imag[i]) / n))) };
+  return { rate, rms: levelDb(samples), samples, spectrum: Float32Array.from(real.subarray(0, n / 2), (r, i) => 20 * Math.log10(Math.max(1e-12, Math.hypot(r, imag[i]) / n))) };
 }
