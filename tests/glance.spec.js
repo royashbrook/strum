@@ -80,7 +80,7 @@ test('native audio continues a real decaying stream below the user gate without 
   // The second refusal must be the -73 dB floor, not expired history.
   const readings=await page.evaluate(async()=>{
     const string=document.querySelectorAll('.string')[1],meter=document.querySelector('#input-db');
-    const started=performance.now(),readings=[],trace=[],samples=new Float32Array(32768);
+    const started=performance.now(),audioStarted=decayAudio.context.currentTime,readings=[],trace=[],samples=new Float32Array(32768);
     const observe=()=>{
       decayAudio.probe.getFloatTimeDomainData(samples);
       const sourceDb=10*Math.log10(samples.reduce((sum,v)=>sum+v*v,0)/samples.length);
@@ -88,7 +88,8 @@ test('native audio continues a real decaying stream below the user gate without 
       const last=trace.at(-1);
       if(trace.length<40&&(!last||last.db!==meter.textContent||last.detail!==detail))
         trace.push({db:meter.textContent,detail,sourceDb:Math.round(sourceDb*10)/10,
-          gainDb:Math.round(20*Math.log10(decayAudio.gain.gain.value)),elapsed:Math.round(performance.now()-started)});
+          gainDb:Math.round(20*Math.log10(decayAudio.gain.gain.value)),elapsed:Math.round(performance.now()-started),
+          audioElapsed:Math.round((decayAudio.context.currentTime-audioStarted)*1000),audioState:decayAudio.context.state});
     };
     observe();
     for(const [peak,db,detail] of [[-68,'-71 dB','↑ 20¢'],[-78,'-81 dB',null]]){
@@ -98,12 +99,13 @@ test('native audio continues a real decaying stream below the user gate without 
         await new Promise(requestAnimationFrame);
       }
       observe();
+      if(performance.now()-started>=2000)
+        throw new Error('Native decay exceeded its pre-expiry observation budget: '+JSON.stringify({readings,trace}));
       readings.push({db:meter.textContent,state:string.dataset.state,tracking:string.dataset.tracking,
         detail:string.querySelector('.reading-detail').textContent,elapsed:performance.now()-started});
     }
     return {readings,trace,channels:decayAudio.destination.channelCount,rate:decayAudio.context.sampleRate};
   });
-  console.log('native-decay-diagnostic',JSON.stringify(readings));
   expect(readings.readings[0],JSON.stringify(readings)).toMatchObject({db:'-71 dB',state:'flat',tracking:'true',detail:'↑ 20¢'});
   expect(readings.readings[1],JSON.stringify(readings)).toMatchObject({db:'-81 dB',state:'quiet',tracking:'false'});
   expect(readings.readings[1].elapsed).toBeLessThan(2000);

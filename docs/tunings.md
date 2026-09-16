@@ -56,3 +56,10 @@ at the -81 dB assertion: the mutant reports flat/tracking instead of quiet.
 Acquisition and the in-band snapshot also wait for the oscillator's known 20-cent
 offset. Linux WebKit produced a transient 33-cent reading at -71 dB before this
 guard: reaching the RMS level alone does not establish a settled pitch spectrum.
+
+One subsequent Linux WebKit run exhausted the observation budget at -76 dB.
+A source-side analyser trace then matched captured levels at -71/-81 dB in both
+Linux engines (44.1 kHz), with the second observation at 1.63/1.65 seconds. This
+does not establish why the earlier native stream varied. The bounded diagnostic
+remains in the fixture, including source and wall clocks; budget exhaustion throws
+before recording a later observation. The detector and capture remain unchanged.
