@@ -83,10 +83,13 @@ test('the continuation path uses the refined pitch for state, and only for measu
   const without = followResonance(f.spectrum, rate, f.rms, cfg, [], 0)[i], withSamples = followResonance(f.spectrum, rate, f.rms, cfg, [], 0, f.samples)[i];
   assert.equal(without.state, 'flat'); assert.equal(withSamples.state, 'tuned');
   assert.equal(Math.abs(withSamples.cents) <= 5, true); assert.equal(withSamples.measuredHz, STRINGS[i].hz * 2 ** (withSamples.cents / 1200));
-  // an uncertain reading stays uncertain whatever the buffer holds
+  // uncertainty is pinned from the INPUT: a row that is uncertain going in, peak and all,
+  // comes out untouched, so refinement can never promote it whatever the buffer holds
   const hum = audioFixture({frequencies: [60], weights: [1, .8, .6, .5, .4, .3, .25, .2], db: -60, noise: -110});
-  const rows = refineReadings(analyseSpectrum(hum.spectrum, 48000, hum.rms, cfg), hum.samples, 48000);
-  for (const s of rows) if (!measured(s)) assert.ok(!('tracking' in s) && s.state !== 'tuned');
+  const before = analyseSpectrum(hum.spectrum, 48000, hum.rms, cfg);
+  assert.ok(before.some(s => !measured(s) && s.measuredHz), 'the fixture must supply an uncertain row with a peak: ' + JSON.stringify(before));
+  const after = refineReadings(before, hum.samples, 48000);
+  before.forEach((s, i) => { if (!measured(s)) assert.deepEqual(after[i], s, JSON.stringify({i, before: s, after: after[i]})); });
 });
 
 test('the capture loop hands the buffer it already reads to the continuation path', async () => {

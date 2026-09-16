@@ -122,11 +122,13 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
 //
 // The advance is unambiguous only within half the segment rate of the starting guess, which
 // at 8192 samples is 15 cents at high E, less than a peg turn moves in a third of a second.
-// So three stage lengths estimate in turn, each from the last: their alias periods differ,
-// so they cannot wrap to the same wrong value, and while the buffer still holds two pitches
-// they disagree. Only agreement within 10 cents, with real energy at the answer, is
-// returned. Anything else keeps the FFT reading, so a refused refinement can never become
-// a wrong-direction instruction.
+// So three stage lengths estimate in turn, each from the last. The lengths are commensurate,
+// so agreement alone cannot rule out a shared alias (a residual of one segment rate at 2048
+// wraps by one, two and four whole turns); what is checked is agreement within 10 cents
+// together with real energy at the answer. While the buffer holds two pitches the stages
+// disagree, and a wrapped estimate sits in the sidelobes with a fraction of the energy.
+// Anything else keeps the FFT reading. In the sweeps run no accepted refinement pointed
+// the wrong way; that is finite coverage, not a guarantee.
 export function refineHz(samples, hz, sampleRate, peakDb, L = 8192) {
   if (!samples || samples.length < 2 * L || !(hz > 0) || !Number.isFinite(peakDb)) return null;
   // One rotating phasor per segment: four multiplies a sample instead of two trigonometric
