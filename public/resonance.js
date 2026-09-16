@@ -1,4 +1,5 @@
-import { analyseSpectrum, settings } from './analysis.js';
+import { analyseSpectrum, settings, spectralPeaks } from './analysis.js';
+import { humSeries, trackHum } from './hum.js';
 import { tuningFor } from './tunings.js';
 
 const measured = s => ['flat', 'sharp', 'tuned'].includes(s.state);
@@ -9,6 +10,9 @@ export function followResonance(spectrum, rate, volume, options, history, now) {
   const config = { ...settings(options), tuning:tuningFor(options?.tuning).id };
   // Even unchanged strings must not inherit evidence from another tuning.
   if (history.some(h => h && h.tuning !== config.tuning)) history.length = 0;
+  // Hum is a property of the room, not the tuning, so its memory survives a switch.
+  const { binHz, prominent } = spectralPeaks(spectrum, rate, config.rejection);
+  config.mask = trackHum(humSeries(prominent, binHz), history.hum ??= { base: null, seen: 0, members: {} }, now);
   const normal = analyseSpectrum(spectrum, rate, volume, config);
   const eligible = history.some(h => h && now >= h.seen && now - h.seen <= 360 && now - h.acquired <= 2500);
   const faint = volume < config.gate && eligible

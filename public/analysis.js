@@ -15,10 +15,10 @@ export function levelDb(samples) {
 }
 const empty = strings => strings.map(s => ({ ...s, state: 'quiet', cents: null, confidence: 0, level: 0 }));
 
-export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
-  const config = settings(options), strings = tuningFor(options?.tuning).strings, output = empty(strings);
-  if (!(sampleRate > 0) || !Number.isFinite(rmsDb) || rmsDb < config.gate || db.length < 1024) return output;
-  const binHz = sampleRate / (db.length * 2), peaks = [], rawPeaks = [];
+// The peak list the detector and the hum tracker both read, so a masked peak is exactly the
+// peak that would otherwise have been a candidate.
+export function spectralPeaks(db, sampleRate, rejection) {
+  const binHz = sampleRate / (db.length * 2), prominent = [], rawPeaks = [];
   for (let i = 2; i < db.length - 2 && i * binHz < 2200; i++) {
     if (!Number.isFinite(db[i]) || db[i] <= db[i - 1] || db[i] <= db[i + 1]) continue;
     const denominator = db[i - 1] - 2 * db[i] + db[i + 1];
@@ -35,9 +35,20 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
       neighbours.push(Number.isFinite(db[i + d]) ? db[i + d] : -120);
     neighbours.sort((a, b) => a - b);
     const prominence = db[i] - neighbours[Math.floor(neighbours.length / 2)];
-    if (prominence < 10 + config.rejection * 10) continue;
-    peaks.push({ ...peak, prominence });
+    if (prominence < 10 + rejection * 10) continue;
+    prominent.push({ ...peak, prominence });
   }
+  return { binHz, prominent, rawPeaks };
+}
+
+export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
+  const config = settings(options), strings = tuningFor(options?.tuning).strings, output = empty(strings);
+  if (!(sampleRate > 0) || !Number.isFinite(rmsDb) || rmsDb < config.gate || db.length < 1024) return output;
+  const { binHz, prominent, rawPeaks } = spectralPeaks(db, sampleRate, config.rejection);
+  // Established hum members (resonance.js tracks them over time) leave the candidate,
+  // harmonic and loudest-peak sets. The isolation rule still sees them among the raw
+  // maxima, so a note beside hum is not called isolated.
+  const mask = options?.mask, peaks = mask?.size ? prominent.filter(p => ![...mask].some(hz => Math.abs(p.hz - hz) < binHz * 0.4)) : prominent;
   if (!peaks.length) return output;
   const loudest = Math.max(...peaks.map(p => p.db));
   const near = (hz, tolerance) => peaks.filter(p => Math.abs(p.hz - hz) < tolerance)
@@ -86,7 +97,7 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
       return support >= 2;
     });
     const cents = 1200 * Math.log2(best.hz / string.hz);
-    output[i] = { ...string, measuredHz: best.hz, confidence: missingLower ? 0 : best.confidence,
+    output[i] = { ...string, measuredHz: best.hz, peakDb: best.db, confidence: missingLower ? 0 : best.confidence,
       level: clamp((best.db - loudest + 40) / 40, 0, 1), cents,
       state: missingLower || best.confidence === 0 || best.confidence < config.rejection ? 'uncertain' : Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
   }
