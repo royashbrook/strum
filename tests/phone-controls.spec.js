@@ -68,7 +68,7 @@ test('native analyser hears a faint note below the former spectral floor without
   await expect(page.locator('#strum-cue')).toBeHidden();
   await page.locator('#nav-settings').tap();await expect(page.locator('#input-label')).toHaveText('note found');
   await page.getByRole('radio',{name:'Noisy room'}).tap();await expect(a).toHaveAttribute('data-state','quiet');
-  await expect(page.locator('#input-label')).toHaveText('too quiet — move closer');
+  await expect(page.locator('#input-label')).toHaveText('too quiet, move closer');
   await page.getByRole('radio',{name:'Quiet guitar'}).tap();await expect(a).toHaveAttribute('data-state','flat');
   await page.locator('#listen').tap();await page.evaluate(()=>quietAudio.context.close());
 });

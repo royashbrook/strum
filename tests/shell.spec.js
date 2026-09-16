@@ -64,7 +64,7 @@ test('raw input is separate from tuning, capture requests music-safe settings, s
   await expect(page.locator('input[value=quiet]')).toBeChecked();await expect(page.locator('#gate,#rejection')).toHaveCount(0);
   await page.locator('#listen').click();await page.locator('#nav-settings').click();
   await page.getByRole('radio',{name:'Noisy room'}).check();
-  await page.evaluate(()=>{window.testLevel=10**(-74/20);});await expect(page.locator('#input-db')).toHaveText('-74 dB');await expect(page.locator('#input-label')).toHaveText('too quiet — move closer');
+  await page.evaluate(()=>{window.testLevel=10**(-74/20);});await expect(page.locator('#input-db')).toHaveText('-74 dB');await expect(page.locator('#input-label')).toHaveText('too quiet, move closer');
   await page.getByRole('radio',{name:'Quiet guitar'}).check();await expect(page.locator('#input-label')).toHaveText('sound, but no clear note');await expect(page.locator('.string[data-state=quiet]')).toHaveCount(6);
   expect(await page.evaluate(()=>probe.constraints.audio)).toEqual({echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:{ideal:1}});
   await page.locator('#nav-about').click();await expect(page.locator('#mic-details')).toContainText('Noise reduction: off');

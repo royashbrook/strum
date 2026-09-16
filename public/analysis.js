@@ -1,9 +1,6 @@
-// Original, fixed-tuning spectral prototype. No code from other tuner projects.
-export const STRINGS = [
-  { note: 'E', octave: 2, hz: 82.4069 }, { note: 'A', octave: 2, hz: 110 },
-  { note: 'D', octave: 3, hz: 146.8324 }, { note: 'G', octave: 3, hz: 195.9977 },
-  { note: 'B', octave: 3, hz: 246.9417 }, { note: 'E', octave: 4, hz: 329.6276 },
-];
+import { tuningFor } from './tunings.js';
+// Standard remains the default for callers without a saved tuning.
+export const STRINGS = tuningFor('standard').strings;
 export const FFT_SIZE = 32768;
 export const defaults = { gate: -60, rejection: 0.35 };
 export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -16,10 +13,10 @@ export function levelDb(samples) {
   for (const v of samples) energy += v * v;
   return samples.length ? 10 * Math.log10(Math.max(1e-12, energy / samples.length)) : -120;
 }
-const empty = () => STRINGS.map(s => ({ ...s, state: 'quiet', cents: null, confidence: 0, level: 0 }));
+const empty = strings => strings.map(s => ({ ...s, state: 'quiet', cents: null, confidence: 0, level: 0 }));
 
 export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
-  const config = settings(options), output = empty();
+  const config = settings(options), strings = tuningFor(options?.tuning).strings, output = empty(strings);
   if (!(sampleRate > 0) || !Number.isFinite(rmsDb) || rmsDb < config.gate || db.length < 1024) return output;
   const binHz = sampleRate / (db.length * 2), peaks = [], rawPeaks = [];
   for (let i = 2; i < db.length - 2 && i * binHz < 2200; i++) {
@@ -45,9 +42,13 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
   const loudest = Math.max(...peaks.map(p => p.db));
   const near = (hz, tolerance) => peaks.filter(p => Math.abs(p.hz - hz) < tolerance)
     .sort((a, b) => Math.abs(a.hz - hz) - Math.abs(b.hz - hz))[0];
-  for (let i = 0; i < STRINGS.length; i++) {
-    const string = STRINGS[i];
-    const candidates = peaks.filter(p => Math.abs(1200 * Math.log2(p.hz / string.hz)) < 80 && p.db > loudest - 35);
+  for (let i = 0; i < strings.length; i++) {
+    const string = strings[i];
+    // Cover the whole-tone trip between these presets. Only the nearest target
+    // owns a peak, so adjacent search ranges never assign it to two strings.
+    const distance = (hz, s) => Math.abs(1200 * Math.log2(hz / s.hz));
+    const candidates = peaks.filter(p => distance(p.hz, string) < 250 && p.db > loudest - 35
+      && !strings.some((s,j) => j !== i && distance(p.hz,s) < distance(p.hz,string) + 30));
     let best = null;
     for (const fundamental of candidates) {
       let harmonics = 0;
@@ -72,10 +73,10 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
     // A microphone can lose the lower fundamental while leaving its overtones.
     // Two other partials must support that lower string before calling this
     // ambiguous; a genuine quiet B/high E alone must remain readable.
-    const missingLower = STRINGS.slice(0, i).some((lower, j) => {
+    const missingLower = strings.slice(0, i).some((lower, j) => {
       if (!['quiet', 'uncertain'].includes(output[j].state)) return false;
       const harmonic = Math.round(best.hz / lower.hz), implied = best.hz / harmonic;
-      if (harmonic < 2 || harmonic > 5 || Math.abs(1200 * Math.log2(implied / lower.hz)) >= 80) return false;
+      if (harmonic < 2 || harmonic > 5 || Math.abs(1200 * Math.log2(implied / lower.hz)) >= 250) return false;
       let support = 0;
       for (let h = 2; h <= 7; h++) {
         if (h % harmonic === 0) continue;
@@ -87,7 +88,7 @@ export function analyseSpectrum(db, sampleRate, rmsDb, options = defaults) {
     const cents = 1200 * Math.log2(best.hz / string.hz);
     output[i] = { ...string, measuredHz: best.hz, confidence: missingLower ? 0 : best.confidence,
       level: clamp((best.db - loudest + 40) / 40, 0, 1), cents,
-      state: missingLower || best.confidence < config.rejection ? 'uncertain' : Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
+      state: missingLower || best.confidence === 0 || best.confidence < config.rejection ? 'uncertain' : Math.abs(cents) <= 5 ? 'tuned' : cents < 0 ? 'flat' : 'sharp' };
   }
   // A single steady spectrum cannot distinguish a string from an exactly overlapping
   // overtone. Never invent an independent high E/B from the low E's harmonics.
