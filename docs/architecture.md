@@ -43,6 +43,7 @@ the migration.
 - `npm run test:mutations`: isolated copies deliberately change five decision boundaries;
   each must fail the independent migration comparison. The phase-energy backstop is not
   covered by these boundary recipes; direct refinement tests cover absent-tone refusal.
+  Local `verify`, hosted checks and deployment all run these mutants automatically.
 
 The manifest id `/`, start URL `/`, service-worker scope, `strum-*` cache family and preference
 keys remain stable. An existing shortcut updates in place. In development, HMR does not

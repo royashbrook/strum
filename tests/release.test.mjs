@@ -46,6 +46,7 @@ test('release contains a complete versioned module graph, stable install identit
     const card = await readFile(resolve(destination, 'og.png'));
     assert.equal(card.readUInt32BE(16),1280);assert.equal(card.readUInt32BE(20),640);
     const headers = await readFile(resolve(destination, '_headers'), 'utf8');
+    assert.doesNotMatch(html + headers, /noindex/i, 'the final release is not marked as a prototype for search');
     assert.match(headers, /microphone=\(self\)/); assert.match(headers, /\/version\.json\n  Cache-Control: no-store/);
     for (const route of ['/', '/index.html', '/sw.js']) assert.ok(headers.includes(`${route}\n  Cache-Control: no-store`));
     assert.equal(JSON.parse(await readFile(resolve(destination, 'version.json'))).build, id);

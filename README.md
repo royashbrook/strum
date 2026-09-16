@@ -13,7 +13,6 @@ HTTPS. No audio recording, upload, or playback. See [architecture and evidence](
 - Exact harmonic overlap is unresolved. Low E's third and fourth harmonics overlap B and high E. Those readings remain `?` when supported only by ambiguous evidence; no fabricated all-green result.
 - Note filtering is not voice classification. A clear voice or hum at a string frequency can still register as a note. Broadband-noise rejection and fundamental-dominant decay checks are now waveform-tested, not a blanket claim about every microphone or room.
 - Recorded-guitar validation is a separate next evidence layer. Synthetic missing-fundamental, noisy-signal and onset checks are not substitutes for microphone recordings or calibrated device measurements.
-- Final brand/icon approval is pending; the six-bar icon is explicitly a draft for phone testing.
 
 ## Install and updates
 
