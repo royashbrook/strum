@@ -1,4 +1,5 @@
-import { STRINGS, settings } from './analysis.js';
+import { settings } from './analysis.js';
+import { TUNINGS, tuningFor } from './tunings.js';
 import { Microphone } from './microphone.js';
 import { wirePwa } from './pwa.js';
 import { rememberTuning } from './tuning-memory.js';
@@ -8,11 +9,13 @@ import { containTaps } from './gestures.js';
 let profile = 'quiet';
 try { profile = listeningProfile(localStorage.getItem('strum.listening.v2'), JSON.parse(localStorage.getItem('strum.settings.v1'))); } catch {}
 let config = settings(listeningProfiles[profile]);
+let tuning = tuningFor();
+try { tuning = tuningFor(localStorage.getItem('strum.tuning.v1')); } catch {}
 const $ = id => document.getElementById(id);
-let readings = STRINGS.map(s => ({ ...s, state:'quiet', cents:null, level:0 })), mode = 'idle', frame, activePage = 'tuner', heardNote = false;
+let readings = [], mode = 'idle', frame, activePage = 'tuner', heardNote = false;
 const tuningMemory = [];
-const motion = STRINGS.map(() => ({value:0, velocity:0}));
-const nodes = STRINGS.map(s => {
+const motion = tuning.strings.map(() => ({value:0, velocity:0}));
+const nodes = tuning.strings.map(s => {
   const el = document.createElement('div'); el.className='string'; el.dataset.state='quiet';el.setAttribute('role','group');
   el.innerHTML=`<div class="pitch-lane" aria-hidden="true"><span class="rail"></span><span class="target"></span><span class="pitch-position"><span class="bead"><span class="direction"></span><span class="thumb"></span></span></span></div><div class="note-label"><span class="note">${s.note}<span class="octave">${s.octave}</span></span><span class="reading">·</span><span class="reading-detail"></span></div>`;
   $('readings').append(el); return el;
@@ -30,7 +33,18 @@ function show(next) {
     nodes[i].setAttribute('aria-label', `${s.note}${s.octave}: ${s.held?'in tune when last heard':s.state==='flat'?'low, tighten gently':s.state==='sharp'?'high, loosen gently':s.state}${s.state==='flat'||s.state==='sharp'?`, ${Math.abs(Math.round(s.cents))} cents`:''}`);
   });
 }
-function resetReadings(){tuningMemory.length=0;motion.forEach(m=>{m.value=0;m.velocity=0;});show(STRINGS.map(s=>({...s,state:'quiet',cents:null,level:0})));}
+function resetReadings(){tuningMemory.length=0;motion.forEach(m=>{m.value=0;m.velocity=0;});show(tuning.strings.map(s=>({...s,state:'quiet',cents:null,level:0})));}
+for(const t of TUNINGS)$('tuning').add(new Option(t.name,t.id));
+function tuningLabels(){
+  $('tuning').value=tuning.id;
+  tuning.strings.forEach((s,i)=>{nodes[i].querySelector('.note').innerHTML=`${s.note}<span class="octave">${s.octave}</span>`;});
+  $('tuning-summary').textContent=`${tuning.name}: ${tuning.strings.map(s=>s.note).join(' ')}. A4 = 440 Hz.`;
+}
+$('tuning').onchange=()=>{
+  tuning=tuningFor($('tuning').value);tuningLabels();resetReadings();
+  try{localStorage.setItem('strum.tuning.v1',tuning.id);}catch{}
+};
+tuningLabels();
 function placeCue(){
   if(activePage!=='tuner'||document.hidden)return;
   const ear=$('listen').getBoundingClientRect(),room=$('instrument').getBoundingClientRect(),cue=$('strum-cue');
@@ -55,12 +69,12 @@ const mic=new Microphone((next,volume,capture)=>{
   if(!heardNote&&next.some(s=>['flat','sharp','tuned'].includes(s.state))){heardNote=true;$('status').textContent='Let it ring.';cue();}
   show(rememberTuning(next,tuningMemory));
   $('input-level').value=Math.max(-100,volume);
-  $('input-label').textContent=volume<=-100?'no sound reaching the mic':next.some(s=>['flat','sharp','tuned'].includes(s.state))?'note found':volume<config.gate?'too quiet — move closer':'sound, but no clear note';
+  $('input-label').textContent=volume<=-100?'no sound reaching the mic':next.some(s=>['flat','sharp','tuned'].includes(s.state))?'note found':volume<config.gate?'too quiet, move closer':'sound, but no clear note';
   $('input-signal').dataset.heard=String(next.some(s=>['flat','sharp','tuned'].includes(s.state)));
   $('input-db').textContent=volume<=-100?'< -100 dB':Math.round(volume)+' dB';
   const flag=value=>value===true?'on':value===false?'off':'not reported';
   $('mic-details').textContent=`${capture.sampleRate} Hz · ${capture.channelCount??'?'} channel(s). Noise reduction: ${flag(capture.noiseSuppression)}. Echo cancellation: ${flag(capture.echoCancellation)}. Automatic gain: ${flag(capture.autoGainControl)}.`;
-},state,()=>config);
+},state,()=>({...config,tuning:tuning.id}));
 $('listen').onclick=()=>{navigate('tuner');if(mode==='listening'||mode==='requesting')mic.stop();else void mic.start();};
 function silence(){mic.stop();}
 wirePwa(silence);

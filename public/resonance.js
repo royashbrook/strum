@@ -1,18 +1,21 @@
 import { analyseSpectrum, settings } from './analysis.js';
+import { tuningFor } from './tunings.js';
 
 const measured = s => ['flat', 'sharp', 'tuned'].includes(s.state);
 
 // Continue an acquired pitch through a short decay, never acquire a new note
 // below the user's gate. Every continuation still passes the full detector.
 export function followResonance(spectrum, rate, volume, options, history, now) {
-  const config = settings(options);
+  const config = { ...settings(options), tuning:tuningFor(options?.tuning).id };
+  // Even unchanged strings must not inherit evidence from another tuning.
+  if (history.some(h => h && h.tuning !== config.tuning)) history.length = 0;
   const normal = analyseSpectrum(spectrum, rate, volume, config);
   const eligible = history.some(h => h && now >= h.seen && now - h.seen <= 360 && now - h.acquired <= 2500);
   const faint = volume < config.gate && eligible
     ? analyseSpectrum(spectrum, rate, volume, { ...config, gate: Math.max(-85, config.gate - 18) }) : normal;
   return normal.map((s, i) => {
     if (measured(s)) {
-      history[i] = { cents: s.cents, acquired: now, seen: now };
+      history[i] = { cents: s.cents, acquired: now, seen: now, tuning:config.tuning };
       return s;
     }
     const previous = history[i], next = faint[i];

@@ -57,7 +57,7 @@ test('installed shell survives network loss and all about links own 44px targets
 test('real A-to-B worker update waits for consent and preserves settings', async ({ page, context, browserName }) => {
   await fakeMic(page);
   await boot(page);
-  await page.locator('#nav-settings').click(); await page.getByRole('radio',{name:'Noisy room'}).check(); await page.locator('#nav-settings').click();
+  await page.locator('#nav-settings').click(); await page.getByRole('radio',{name:'Noisy room'}).check(); await page.locator('#tuning').selectOption('open-d'); await page.locator('#nav-settings').click();
   await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');
   await page.evaluate(() => { window.sameSession = true; });
   root = 'b';
@@ -75,11 +75,15 @@ test('real A-to-B worker update waits for consent and preserves settings', async
   await expect(page.locator('#version')).toContainText(second, { timeout: 15000 });
   await expect(page.locator('#update-notice')).toBeHidden();
   await expect(page.locator('input[value=noisy]')).toBeChecked();
+  await expect(page.locator('#tuning')).toHaveValue('open-d');
+  await expect(page.locator('.note')).toHaveText(['D2','A2','D3','F♯3','A3','D4']);
   await expect(page.locator('#listen')).toHaveText('listen');
   expect(await page.evaluate(()=>sessionStorage.getItem('test-track-stops'))).toBe('2');
   await disconnect(context, browserName); await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#version')).toContainText(second);
   await expect(page.locator('input[value=noisy]')).toBeChecked();
+  await expect(page.locator('#tuning')).toHaveValue('open-d');
+  await expect(page.locator('.note')).toHaveText(['D2','A2','D3','F♯3','A3','D4']);
 });
 
 test('incomplete new release cannot activate or advertise itself as downloaded', async ({ page }) => {
