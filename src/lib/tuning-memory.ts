@@ -1,10 +1,12 @@
 // Display memory only. The analyser remains the source of new pitch evidence.
-export function rememberTuning(readings, history) {
+import type { Reading, DisplayReading, TuningMemory } from './types.ts';
+import { CONFIRMATION_FRAMES } from './policy.ts';
+export function rememberTuning(readings: Reading[], history: TuningMemory[]): DisplayReading[] {
   return readings.map((reading, i) => {
-    const memory = history[i] ??= { frames: 0, tuned: false };
+    const memory = (history[i] ??= { frames: 0, tuned: false });
     if (reading.state === 'tuned') {
       // Three consecutive readings avoid saving a one-frame green flash.
-      if (++memory.frames >= 3) memory.tuned = true;
+      if (++memory.frames >= CONFIRMATION_FRAMES) memory.tuned = true;
       return { ...reading, state: memory.tuned ? 'tuned' : 'checking', held: false };
     }
     memory.frames = 0;

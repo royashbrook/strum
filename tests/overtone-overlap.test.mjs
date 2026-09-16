@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyseSpectrum } from '../public/analysis.js';
+import { analyseSpectrum } from '../src/lib/analysis.ts';
 import { filteredPluck } from './filtered-pluck.js';
 
 for (const rate of [44100, 48000]) {

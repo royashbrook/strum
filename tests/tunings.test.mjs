@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TUNINGS, tuningFor} from '../public/tunings.js';
-import {analyseSpectrum} from '../public/analysis.js';
-import {followResonance} from '../public/resonance.js';
-import {listeningProfiles} from '../public/listening.js';
+import {TUNINGS, tuningFor} from '../src/lib/tunings.ts';
+import {analyseSpectrum} from '../src/lib/analysis.ts';
+import { followResonance, createHistory } from '../src/lib/resonance.ts';
+import {listeningProfiles} from '../src/lib/listening.ts';
 import {audioFixture} from './waveform.js';
 
 const expected = [
@@ -63,7 +63,7 @@ test('open-tuning octave collisions stay ambiguous in a full strum, not falsely 
   }
 });
 test('fading evidence cannot cross a tuning switch, even for an unchanged A string',()=>{
-  const history=[],loud=audioFixture({frequencies:[110],db:-42,noise:-110}),faint=audioFixture({frequencies:[110],db:-68,noise:-110});
+  const history = createHistory(),loud=audioFixture({frequencies:[110],db:-42,noise:-110}),faint=audioFixture({frequencies:[110],db:-68,noise:-110});
   const config={gate:-60,rejection:.35,tuning:'standard'};
   const r=(f,options,time)=>followResonance(f.spectrum,f.rate,f.rms,options,history,time);
   assert.equal(r(loud,config,0)[1].state,'tuned');

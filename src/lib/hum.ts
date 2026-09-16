@@ -7,22 +7,38 @@
 // decibels a second even when it sustains well, and arrives with a jump. So a member is
 // masked only once it has held within 1.5 dB for two seconds, a rise releases it at once,
 // and a fall restarts its clock.
-export const HUM_SETTLE_MS = 2000, HUM_STEADY_DB = 1.5, HUM_ONSET_DB = 6, HUM_RELEASE_GRACE_MS = 200;
+import type { ProminentPeak, HumState, HumMember } from './types.ts';
+interface HumSeries {
+  base: number;
+  members: Map<number, ProminentPeak>;
+  low: number[];
+}
+export const HUM_SETTLE_MS = 2000,
+  HUM_STEADY_DB = 1.5,
+  HUM_ONSET_DB = 6,
+  HUM_RELEASE_GRACE_MS = 200;
 
-export function humSeries(peaks, binHz) {
-  let best = null;
+export function humSeries(peaks: ProminentPeak[], binHz: number): HumSeries | null {
+  let best: HumSeries | null = null;
   for (const base of [50, 60]) {
-    const members = new Map();
+    const members = new Map<number, ProminentPeak>();
     for (const p of peaks) {
       const k = Math.round(p.hz / base);
       // Half a percent, or 0.4 bins where that is wider: mains holds to a tenth of a percent
       // and the interpolated peak to a tenth of a bin. 1.2 bins was 30 cents at 100 Hz.
-      if (k >= 1 && k <= 24 && Math.abs(p.hz - k * base) < Math.max(binHz * 0.4, k * base * 0.005) && !members.has(k)) members.set(k, p);
+      if (
+        k >= 1 &&
+        k <= 24 &&
+        Math.abs(p.hz - k * base) < Math.max(binHz * 0.4, k * base * 0.005) &&
+        !members.has(k)
+      )
+        members.set(k, p);
     }
     // The base itself must be there: no guitar string can supply 50 or 60 Hz, while an Open G
     // chord 35 cents sharp supplies 100, 150 and 200. Two more low members make a series.
-    const low = [1, 2, 3, 4].filter(k => members.has(k));
-    if (members.has(1) && low.length >= 3 && (!best || members.size > best.members.size)) best = { base, members, low };
+    const low = [1, 2, 3, 4].filter((k) => members.has(k));
+    if (members.has(1) && low.length >= 3 && (!best || members.size > best.members.size))
+      best = { base, members, low };
   }
   return best;
 }
@@ -32,31 +48,49 @@ export function humSeries(peaks, binHz) {
 export const HUM_HOLD_MS = 1500;
 
 // state persists across frames: { base, seen, members: { k: { since, anchor, level, seen, graceUntil } } }
-export function trackHum(series, state, now) {
+export function trackHum(series: HumSeries | null, state: HumState, now: number): Set<number> {
   const stale = state.base != null && (now < state.seen || now - state.seen > HUM_HOLD_MS);
-  if (stale || (series && series.base !== state.base)) { state.base = series?.base ?? null; state.members = {}; }
+  if (stale || (series && series.base !== state.base)) {
+    state.base = series?.base ?? null;
+    state.members = {};
+  }
   if (!series) return new Set();
-  state.base = series.base; state.seen = now;
-  const next = {};
-  for (const [k, m] of Object.entries(state.members)) if (now - m.seen <= HUM_HOLD_MS && !series.members.has(Number(k))) next[k] = m;
+  state.base = series.base;
+  state.seen = now;
+  const next: Record<number, HumMember> = {};
+  for (const [k, m] of Object.entries(state.members))
+    if (now - m.seen <= HUM_HOLD_MS && !series.members.has(Number(k))) next[Number(k)] = m;
   for (const [k, p] of series.members) {
-    const m = state.members[k], settled = m && now - m.since >= HUM_SETTLE_MS;
-    if (!m || now < m.since) next[k] = { since: now, anchor: p.db, level: p.db, seen: now, graceUntil: 0 };
+    const m = state.members[k],
+      settled = m && now - m.since >= HUM_SETTLE_MS;
+    if (!m || now < m.since)
+      next[k] = { since: now, anchor: p.db, level: p.db, seen: now, graceUntil: 0 };
     // A jump, or a rise out of the band, is a pluck: release now, no grace.
-    else if (p.db > m.level + HUM_ONSET_DB || p.db > m.anchor + HUM_STEADY_DB) next[k] = { since: now, anchor: p.db, level: p.db, seen: now, graceUntil: 0 };
+    else if (p.db > m.level + HUM_ONSET_DB || p.db > m.anchor + HUM_STEADY_DB)
+      next[k] = { since: now, anchor: p.db, level: p.db, seen: now, graceUntil: 0 };
     // A fall out of the band is decay or the hum stopping: restart the clock, but a settled
     // member keeps its mask briefly so the hum's own tail cannot flash a wrong string.
-    else if (p.db < m.anchor - HUM_STEADY_DB) next[k] = { since: now, anchor: p.db, level: p.db, seen: now, graceUntil: settled ? now + HUM_RELEASE_GRACE_MS : m.graceUntil };
+    else if (p.db < m.anchor - HUM_STEADY_DB)
+      next[k] = {
+        since: now,
+        anchor: p.db,
+        level: p.db,
+        seen: now,
+        graceUntil: settled ? now + HUM_RELEASE_GRACE_MS : m.graceUntil,
+      };
     else next[k] = { ...m, level: p.db, seen: now };
   }
   state.members = next;
-  const masked = new Set();
+  const masked = new Set<number>();
   for (const [k, p] of series.members) {
     const m = next[k];
     if (now - m.since < HUM_SETTLE_MS && now >= m.graceUntil) continue;
     // The hum's own level comes from low members that cannot be this peak's partials. A
     // note 12 dB above that keeps its peaks even where they land on a multiple.
-    const floor = series.low.filter(j => (k === 1 ? j !== 1 : j % k !== 0)).map(j => series.members.get(j).db).sort((a, b) => a - b);
+    const floor = series.low
+      .filter((j) => (k === 1 ? j !== 1 : j % k !== 0))
+      .map((j) => series.members.get(j)!.db)
+      .sort((a, b) => a - b);
     if (floor.length >= 2 && p.db < floor[Math.floor(floor.length / 2)] + 12) masked.add(p.hz);
   }
   return masked;

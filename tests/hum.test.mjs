@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {STRINGS, analyseSpectrum} from '../public/analysis.js';
-import {humSeries, trackHum, HUM_SETTLE_MS, HUM_HOLD_MS} from '../public/hum.js';
-import {followResonance} from '../public/resonance.js';
-import {rememberTuning} from '../public/tuning-memory.js';
-import {tuningFor} from '../public/tunings.js';
-import {listeningProfiles} from '../public/listening.js';
+import {STRINGS, analyseSpectrum} from '../src/lib/analysis.ts';
+import {humSeries, trackHum, HUM_SETTLE_MS, HUM_HOLD_MS} from '../src/lib/hum.ts';
+import { followResonance, createHistory } from '../src/lib/resonance.ts';
+import {rememberTuning} from '../src/lib/tuning-memory.ts';
+import {tuningFor} from '../src/lib/tunings.ts';
+import {listeningProfiles} from '../src/lib/listening.ts';
 import {audioFixture} from './waveform.js';
 
 const measured = s => ['flat','sharp','tuned'].includes(s.state);
@@ -14,7 +14,7 @@ const pluck = [1, .5, .33, .25, .2, .16];
 const HOP = 90, SETTLED = Math.ceil((HUM_SETTLE_MS + 700) / HOP) + 2;
 // Feed one fixture per 90 ms frame through the continuation path, like microphone.js does.
 function play(frames, {rate = 48000, tuning = 'standard', profile = listeningProfiles.quiet} = {}) {
-  const history = [], memory = [], out = [];
+  const history = createHistory(), memory = [], out = [];
   frames.forEach((spec, i) => {
     const f = audioFixture({rate, noise: -95, ...spec});
     const raw = followResonance(f.spectrum, f.rate, f.rms, {...profile, tuning}, history, i * HOP);
@@ -86,7 +86,7 @@ test('an ordinary sharp chord is never treated as hum: the Open G control, no hu
   // three in-tune frames, then the whole guitar 35 cents sharp, exactly as reported
   const t = tuningFor('open-g'), cfg = {gate: -85, rejection: .35, tuning: t.id};
   const fixture = cents => audioFixture({rate: 48000, frequencies: t.strings.map(s => s.hz * 2 ** (cents / 1200)), weights: [1, .6, .3, .15], db: -55, noise: -110});
-  const tuned = fixture(0), sharp = fixture(35), history = [], memory = [];
+  const tuned = fixture(0), sharp = fixture(35), history = createHistory(), memory = [];
   let shown;
   for (let i = 0; i < 8; i++) { const f = i < 3 ? tuned : sharp; shown = rememberTuning(followResonance(f.spectrum, f.rate, f.rms, cfg, history, i * HOP), memory); }
   for (const i of [0, 1, 4]) { assert.equal(shown[i].state, 'sharp', JSON.stringify(shown)); assert.equal(shown[i].held, false); }

@@ -1,4 +1,4 @@
-import { STRINGS, FFT_SIZE } from '../public/analysis.js';
+import { STRINGS, FFT_SIZE } from '../src/lib/analysis.ts';
 // Synthetic spectra exercise app behavior, not real-guitar accuracy.
 export function spectrum(strings, rate = 48000) {
   const bins = new Float32Array(FFT_SIZE / 2).fill(-120);

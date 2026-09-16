@@ -1,30 +1,70 @@
-import { mkdir, readdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { resolve, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { build as viteBuild } from 'vite';
 
-export async function build(source, target, version) {
-  const files = (await readdir(source)).sort();
+async function files(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const result = await Promise.all(
+    entries.map((entry) =>
+      entry.isDirectory() ? files(resolve(directory, entry.name)) : resolve(directory, entry.name),
+    ),
+  );
+  return result.flat().sort();
+}
+
+export async function build(root, target, version) {
+  // Stable source/lockfile identity, not a timestamp that retires identical builds.
+  const inputs = [
+    ...(await files(resolve(root, 'src'))),
+    ...(await files(resolve(root, 'public'))),
+    ...[
+      'index.html',
+      'vite.config.ts',
+      'svelte.config.js',
+      'package-lock.json',
+      'scripts/build.mjs',
+    ].map((file) => resolve(root, file)),
+  ].sort();
   const hash = createHash('sha256').update(version);
-  for (const file of files) hash.update(file).update(await readFile(resolve(source, file)));
-  const id = hash.digest('hex').slice(0, 12), shell = ['/'];
-  await mkdir(resolve(target, 'assets', id), { recursive: true });
-  for (const file of files) {
-    if (file === 'sw.js' || file === 'index.html') continue;
-    const destination = /\.(js|css)$/.test(file) ? `assets/${id}/${file}` : file;
-    await copyFile(resolve(source, file), resolve(target, destination));
-    if (file !== '_headers') shell.push('/' + destination);
-  }
-  const html = (await readFile(resolve(source, 'index.html'), 'utf8')).replaceAll('BUILD_ID', id).replaceAll('APP_VERSION', version);
-  await writeFile(resolve(target, 'index.html'), html);
-  const worker = (await readFile(resolve(source, 'sw.js'), 'utf8')).replaceAll('BUILD_ID', id).replace('PRECACHE_ASSETS', JSON.stringify(shell));
-  await writeFile(resolve(target, 'sw.js'), worker);
+  for (const file of inputs) hash.update(relative(root, file)).update(await readFile(file));
+  const id = hash.digest('hex').slice(0, 12);
+  const define = { __APP_VERSION__: JSON.stringify(version), __BUILD_ID__: JSON.stringify(id) };
+  await viteBuild({
+    root,
+    configFile: resolve(root, 'vite.config.ts'),
+    define,
+    logLevel: 'error',
+    build: { outDir: target, emptyOutDir: true },
+  });
+  const shell = (await files(target))
+    .map((file) => '/' + relative(target, file).replaceAll('\\', '/'))
+    .filter((file) => file !== '/_headers' && !file.endsWith('.map'))
+    .map((file) => (file === '/index.html' ? '/' : file));
+  await viteBuild({
+    root,
+    configFile: false,
+    publicDir: false,
+    logLevel: 'error',
+    define: { ...define, __PRECACHE_ASSETS__: JSON.stringify(shell) },
+    build: {
+      target: 'es2022',
+      outDir: target,
+      emptyOutDir: false,
+      lib: {
+        entry: resolve(root, 'src/service-worker.ts'),
+        formats: ['iife'],
+        name: 'StrumWorker',
+        fileName: () => 'sw.js',
+      },
+      minify: true,
+    },
+  });
   await writeFile(resolve(target, 'version.json'), JSON.stringify({ version, build: id }));
   return id;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  // dist is generated output only; start clean so removed source files cannot ship.
-  await rm(resolve('dist'), { recursive: true, force: true });
   const { version } = JSON.parse(await readFile('package.json', 'utf8'));
-  console.log(`Built strum ${version} (${await build(resolve('public'), resolve('dist'), version)})`);
+  console.log(`Built strum ${version} (${await build(process.cwd(), resolve('dist'), version)})`);
 }

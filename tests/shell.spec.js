@@ -3,8 +3,10 @@ import { spectrum } from './spectrum.js';
 import { fakeMic } from './microphone-fixture.js';
 import { filteredPluck } from './filtered-pluck.js';
 import { audioFixture } from './waveform.js';
+import { readFileSync } from 'node:fs';
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 test('quiet boot, compact version/about header, no microphone without a gesture',async({page})=>{
-  await fakeMic(page);await page.goto('/');await expect(page.locator('.string')).toHaveCount(6);await expect(page.locator('#demo')).toHaveCount(0);await expect(page.locator('.dock button')).toHaveCount(3);await expect(page.locator('#header-version')).toHaveText(/^v\d+\.\d+\.\d+$/);expect(await page.evaluate(()=>probe.requests)).toBe(0);await expect(page.locator('.string[data-state=tuned]')).toHaveCount(0);
+  await fakeMic(page);await page.goto('/');await expect(page.locator('.string')).toHaveCount(6);await expect(page.locator('#demo')).toHaveCount(0);await expect(page.locator('.dock button')).toHaveCount(3);await expect(page.locator('#header-version')).toHaveText('v'+version);expect(await page.evaluate(()=>probe.requests)).toBe(0);await expect(page.locator('.string[data-state=tuned]')).toHaveCount(0);
   for(const size of [{width:390,height:844},{width:360,height:640},{width:430,height:932}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);for(const id of ['listen','nav-about']){const box=await page.locator('#'+id).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(size.height);}}
 });
 test('about keeps privacy guidance without prototype copy and returns focus',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#nav-about').click();await expect(page.locator('#about')).not.toContainText(/prototype|draft icon|Phone-test/i);await expect(page.locator('#about')).toContainText('never recorded or uploaded');await expect(page.locator('#about-title')).toBeFocused();await page.locator('#nav-about').click();await expect(page.locator('#listen')).toBeFocused();expect(await page.evaluate(()=>probe.requests)).toBe(0);});

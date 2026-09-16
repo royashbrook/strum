@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyseSpectrum, settings, STRINGS } from '../public/analysis.js';
+import { analyseSpectrum, settings, STRINGS } from '../src/lib/analysis.ts';
 import { audioFixture } from './waveform.js';
 const analyse = (fixture, config = settings()) => analyseSpectrum(fixture.spectrum, fixture.rate, fixture.rms, config);
 

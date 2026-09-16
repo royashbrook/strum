@@ -1,4 +1,4 @@
-import { FFT_SIZE, STRINGS, levelDb } from '../public/analysis.js';
+import { FFT_SIZE, STRINGS, levelDb } from '../src/lib/analysis.ts';
 
 // Deterministic audio samples, not hand-painted spectral peaks. This mirrors the
 // Web Audio Blackman window + DFT, using an iterative radix-2 FFT only in tests.
