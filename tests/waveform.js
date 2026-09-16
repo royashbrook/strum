@@ -2,7 +2,7 @@ import { FFT_SIZE, STRINGS, levelDb } from '../public/analysis.js';
 
 // Deterministic audio samples, not hand-painted spectral peaks. This mirrors the
 // Web Audio Blackman window + DFT, using an iterative radix-2 FFT only in tests.
-export function audioFixture({ rate = 48000, notes = [[0, 0]], db = -45, weights = [1, .04, .01], noise = -100, phase = 0, decay = 0, frequencies, seed = 1234567 } = {}) {
+export function audioFixture({ rate = 48000, notes = [[0, 0]], db = -45, weights = [1, .04, .01], noise = -100, phase = 0, decay = 0, frequencies, seed = 1234567, hum = null } = {}) {
   const n = FFT_SIZE, samples = new Float32Array(n);
   const tones = frequencies ?? notes.map(([i, cents]) => STRINGS[i].hz * 2 ** (cents / 1200));
   for (let i = 0; i < n; i++) {
@@ -10,6 +10,8 @@ export function audioFixture({ rate = 48000, notes = [[0, 0]], db = -45, weights
     let value = (seed / 2 ** 32 * 2 - 1) * 10 ** (noise / 20);
     for (const hz of tones) for (let h = 0; h < weights.length; h++)
       value += weights[h] * Math.sin(2 * Math.PI * hz * (h + 1) * i / rate + phase * (h + 1)) * 10 ** (db / 20) * Math.exp(-decay * i / rate);
+    // Mains hum: a series at multiples of the base falling off as 1/k, like a transformer or a dimmer.
+    if (hum) for (let k = 1; k <= hum.harmonics; k++) value += Math.sin(2 * Math.PI * hum.hz * k * i / rate + k) / k * 10 ** (hum.db / 20);
     samples[i] = value;
   }
   return sampleFixture(samples, rate);
