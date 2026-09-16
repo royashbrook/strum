@@ -40,6 +40,9 @@ the migration.
   verification after deployment remains a separate check.
 - `node --experimental-strip-types scripts/benchmark.mjs`: warm median/p95 detector timing
   against the same pinned release. Synthetic fixtures are generated outside the timed region.
+- `npm run test:mutations`: isolated copies deliberately change five decision boundaries;
+  each must fail the independent migration comparison. The phase-energy backstop is not
+  covered by these boundary recipes; direct refinement tests cover absent-tone refusal.
 
 The manifest id `/`, start URL `/`, service-worker scope, `strum-*` cache family and preference
 keys remain stable. An existing shortcut updates in place. In development, HMR does not

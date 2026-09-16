@@ -9,12 +9,13 @@
   "scripts": {
     "dev": "vite",
     "preview": "vite preview",
-    "format:check": "prettier --check 'src/**/*.{ts,svelte,css}' vite.config.ts svelte.config.js package.json tsconfig.json scripts/build.mjs scripts/benchmark.mjs",
+    "format:check": "prettier --check 'src/**/*.{ts,svelte,css}' vite.config.ts svelte.config.js package.json tsconfig.json scripts/build.mjs scripts/benchmark.mjs scripts/check-migration-mutants.mjs",
     "check": "npm run format:check && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
     "test:browser": "playwright test",
     "test:edge": "playwright test --config=playwright.edge.config.js",
+    "test:mutations": "node scripts/check-migration-mutants.mjs",
     "verify": "npm run check && npm test && npm run test:browser && npm run test:edge",
     "icons": "node scripts/icons.mjs",
     "deploy": "npm run check && npm run build && wrangler deploy"
