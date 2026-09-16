@@ -28,10 +28,16 @@ the migration.
 - `npm run check`: formatting and strict TypeScript/Svelte checks, warnings fail.
 - `npm test`: detector, lifecycle policy and release-artifact tests. The migration oracle
   compares against commit `9ca8d5c4011a64d2c34b22f659a82ae4d0f7fc65`, not a copied rewrite.
+  Independently assembled boundary cases add 373 scenarios, 1,873 timestamped frames and
+  11,238 readings, including display memory. The input recipes are committed; the pinned
+  release supplies expected outputs at test time, so there is no generated-output blob to maintain.
   Keep git history available (`fetch-depth: 0` in CI).
 - `npm run test:browser`: builds first, then Playwright Chromium/WebKit against Vite preview.
   The worker suite builds the actual installed v0.1.10 from git and upgrades it to the new app,
   then also exercises a Svelte-to-Svelte release update.
+- `npm run test:edge`: Chromium/WebKit against the local Cloudflare asset runtime, including
+  the actual CSP/permissions/cache headers, tuning/motion and installed worker. Live-origin
+  verification after deployment remains a separate check.
 - `node --experimental-strip-types scripts/benchmark.mjs`: warm median/p95 detector timing
   against the same pinned release. Synthetic fixtures are generated outside the timed region.
 
@@ -46,7 +52,7 @@ feedback before this migration. That is real playtest evidence, not a calibrated
 study. The synthetic fixtures cover four tunings, sample rates, harmonics, hum, weak notes,
 decay and ambiguity; they are not microphone recordings.
 
-There is not yet a consented, annotated real-guitar recording corpus in this repository.
+There is not yet a consented, annotated real-guitar recording set in this repository.
 Do not manufacture one or relabel generated sine waves. Future recordings should include
 instrument/string/tuning, reference pitch, microphone/device, room conditions, sample rate,
 and rights/consent, and stay local in test tooling. Production still never records or uploads.

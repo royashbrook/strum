@@ -34,6 +34,7 @@ test('release contains a complete versioned module graph, stable install identit
       assert.ok((await readFile(resolve(destination, name))).length);
     }
     const manifest = JSON.parse(await readFile(resolve(destination, 'manifest.json')));
+    assert.doesNotMatch(manifest.description, /prototype/i);
     assert.equal(manifest.id, '/'); assert.equal(manifest.start_url, '/'); assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.orientation, 'any');
     assert.ok(!sw.includes('"/_headers"'), 'deployment headers must never enter the service-worker precache');
@@ -41,6 +42,9 @@ test('release contains a complete versioned module graph, stable install identit
       const png = await readFile(resolve(destination, file));
       assert.equal(png.readUInt32BE(16), size); assert.equal(png.readUInt32BE(20), size);
     }
+    assert.match(html, /property="og:image" content="https:\/\/strum\.royashbrook\.com\/og\.png"/);
+    const card = await readFile(resolve(destination, 'og.png'));
+    assert.equal(card.readUInt32BE(16),1280);assert.equal(card.readUInt32BE(20),640);
     const headers = await readFile(resolve(destination, '_headers'), 'utf8');
     assert.match(headers, /microphone=\(self\)/); assert.match(headers, /\/version\.json\n  Cache-Control: no-store/);
     for (const route of ['/', '/index.html', '/sw.js']) assert.ok(headers.includes(`${route}\n  Cache-Control: no-store`));

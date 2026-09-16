@@ -14,7 +14,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
     "test:browser": "playwright test",
-    "verify": "npm run check && npm test && npm run test:browser",
+    "test:edge": "playwright test --config=playwright.edge.config.js",
+    "verify": "npm run check && npm test && npm run test:browser && npm run test:edge",
     "icons": "node scripts/icons.mjs",
     "deploy": "npm run check && npm run build && wrangler deploy"
   },

@@ -27,9 +27,11 @@ The app checks for updates every minute while visible, on return, and on demand 
 
 `npm run build` bundles/minifies the app and worker with Vite, generates hashed assets and
 a version receipt, and derives the precache list from the finished artifact in `dist/`.
-`npm run check` checks strict types. `npm test` runs deterministic unit and migration tests.
+`npm run check` checks formatting and strict types. `npm test` runs deterministic unit and migration tests.
 `npm run test:browser` owns a separate production-preview server and tests Chromium/WebKit,
-including the real v0.1.10-to-v1 installed update. Only `dist/` is published.
+including the real v0.1.10-to-v1 installed update and Svelte-to-Svelte updates.
+`npm run test:edge` checks the built app under the local Cloudflare asset runtime's security
+and cache headers. `npm run verify` runs all gates. Only `dist/` is published.
 
 ## Implementation
 
