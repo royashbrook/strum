@@ -28,7 +28,13 @@ test('release contains a complete versioned module graph, stable install identit
     for (const name of assets) {
       assert.ok(sw.includes(`/assets/${name}`), `${name} must be precached`);
       assert.ok((await readFile(resolve(destination, 'assets', name))).length);
+      if (name.endsWith('.js')) assert.match(await readFile(resolve(destination, 'assets', name), 'utf8'), /Bundled dependency licenses: \/licenses\.md/);
     }
+    const notices = await readFile(resolve(destination, 'licenses.md'), 'utf8');
+    const svelteLicense = await readFile(resolve('node_modules/svelte/LICENSE.md'), 'utf8');
+    assert.ok(notices.includes(svelteLicense.trim()), 'the complete installed Svelte license must accompany its runtime');
+    assert.ok(sw.includes('/licenses.md'), 'runtime notices are available offline');
+    assert.match(html, /rel="license" href="\/licenses\.md"/);
     for (const name of ['thumb-up.svg', 'ear.svg', 'settings.svg', 'info-circle.svg', 'hand-finger.svg', 'guitar.svg', 'third-party.txt']) {
       assert.ok(sw.includes('/' + name));
       assert.ok((await readFile(resolve(destination, name))).length);

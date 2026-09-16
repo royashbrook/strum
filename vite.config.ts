@@ -30,5 +30,11 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(version), __BUILD_ID__: JSON.stringify('development') },
   server: { host: '127.0.0.1', port: 4193, strictPort: true },
   preview: { host: '127.0.0.1', port: 4194, strictPort: true },
-  build: { target: 'es2022' },
+  build: {
+    target: 'es2022',
+    license: { fileName: 'licenses.md' },
+    rolldownOptions: {
+      output: { postBanner: '/* Bundled dependency licenses: /licenses.md */' },
+    },
+  },
 });
