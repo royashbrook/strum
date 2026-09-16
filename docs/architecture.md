@@ -49,6 +49,9 @@ The manifest id `/`, start URL `/`, service-worker scope, `strum-*` cache family
 keys remain stable. An existing shortcut updates in place. In development, HMR does not
 register a worker; use the production preview for offline/update validation.
 
+Vite generates `licenses.md` from the bundled dependencies. The app precaches these notices
+alongside the existing artwork credits, and its module banner points to the generated file.
+
 ## evidence and limits
 
 The user reported successful tuning of every guitar in the house and positive shared-user

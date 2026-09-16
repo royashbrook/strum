@@ -40,6 +40,10 @@ test('the actual asset host enforces headers without breaking tuning, motion or 
     return (await cache.keys()).map(r=>new URL(r.url).pathname);
   });
   expect(cached).toContain('/');expect(cached).toContain(script);
+  expect(cached).toContain('/licenses.md');
+  const notices = await request.get('/licenses.md');
+  expect(notices.ok()).toBe(true);
+  expect(await notices.text()).toContain('Svelte Contributors');
   expect(cached).not.toContain('/_headers');
   expect(errors).toEqual([]);expect(violations).toEqual([]);
 });
