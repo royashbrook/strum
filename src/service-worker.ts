@@ -41,12 +41,14 @@ self.addEventListener('fetch', (event) => {
       // The complete shell was cached at install, including icons and the manifest.
       // Only navigation needs the network first; don't stall cached assets offline.
       if (request.mode !== 'navigate') {
-        const saved = await cache.match(request);
+        const saved = await cache.match(SHELL.includes(url.pathname) ? url.pathname : request);
         if (saved) return saved;
       }
       try {
         const response = await fetch(request);
-        if (response.ok) {
+        // Query/path variants are not additional shell entries. Keep their network responses
+        // out of the cache, and never overwrite '/' with another navigation's content.
+        if (response.ok && !url.search && SHELL.includes(url.pathname)) {
           const copy = response.clone();
           event.waitUntil(cache.put(request, copy).catch(() => {}));
         }
