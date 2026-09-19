@@ -23,3 +23,10 @@ test('local verification and hosted checks exercise the migration mutants', asyn
   assert.ok(pkg.scripts.verify.split(' && ').includes('npm run test:mutations'));
   assert.match(workflow, /- run: npm run test:mutations/);
 });
+
+test('every deployment action uses an immutable upstream revision', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+  const actions = [...workflow.matchAll(/uses: (\S+)/g)].map(match => match[1]);
+  assert.ok(actions.length > 0);
+  for (const action of actions) assert.match(action, /^[\w-]+\/[\w-]+@[a-f0-9]{40}$/);
+});

@@ -21,12 +21,14 @@ test.beforeAll(async () => {
     if (networkDown) { request.socket.destroy(); return; }
     try {
       const pathname = new URL(request.url, 'http://localhost').pathname;
+      if (/^\/dynamic-\d+$/.test(pathname)) { response.writeHead(200).end(pathname); return; }
       if (stallProbe && pathname === '/version.json') return;
       if (breakDownload && pathname.startsWith('/assets/') && pathname.endsWith('.js')) { response.writeHead(503).end(); return; }
       const base = resolve(directory, root), file = resolve(base, '.' + (pathname === '/' ? '/index.html' : pathname));
       if (!file.startsWith(base + sep)) { response.writeHead(403).end(); return; }
       const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
-      response.writeHead(200, { 'Content-Type': types[extname(file)] || 'text/plain', 'Cache-Control': 'no-store' }).end(await readFile(file));
+      const body = await readFile(file);
+      response.writeHead(200, { 'Content-Type': types[extname(file)] || 'text/plain', 'Cache-Control': 'no-store' }).end(body);
     } catch { response.writeHead(404).end(); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -52,6 +54,30 @@ for (const base of ['a', 'b']) test.describe(base === 'a' ? 'installed v0.1.10' 
 test.beforeEach(() => {
   root = base; nextRoot = base === 'a' ? 'b' : 'c';
   first = builds[base]; second = builds[nextRoot];
+});
+
+test('query and path variation cannot grow the installed shell cache', async ({ page, context, browserName }) => {
+  test.skip(base === 'a', 'the pinned legacy release predates the cache boundary');
+  await boot(page);
+  const keys = () => page.evaluate(async () => {
+    const name = (await caches.keys()).find(name => name.startsWith('strum-'));
+    return (await (await caches.open(name)).keys()).map(request => request.url).sort();
+  });
+  const before = await keys();
+  for (let i = 0; i < 20; i++) await page.goto(`${origin}/?cache-variant=${i}`);
+  await page.evaluate(async () => {
+    for (let i = 0; i < 20; i++) {
+      await fetch(`/manifest.json?variant=${i}`);
+      await fetch(`/dynamic-${i}`);
+      await fetch(`/missing-${i}`);
+    }
+  });
+  expect(await keys()).toEqual(before);
+  await disconnect(context, browserName);
+  await page.goto(`${origin}/?offline-variant=1`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.string')).toHaveCount(6);
+  expect(await page.evaluate(async () => (await fetch('/manifest.json?offline=1')).ok)).toBe(true);
+  expect(await keys()).toEqual(before);
 });
 
 test('installed shell survives network loss and all about links own 44px targets', async ({ page, context, browserName }) => {
