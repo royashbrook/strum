@@ -104,12 +104,13 @@
   });
 
   // --- pluck-location string lines (spike) ---------------------------------
-  // Each sounding string draws a travelling wiggle whose envelope bulges at the
-  // measured pluck point, with a soft node that blooms on the attack and fades.
-  const STRENGTH_FLOOR = 0.28;
+  // ANY sounding string wiggles (amplitude from its level); the pluck NODE's brightness
+  // rides the comb strength, so a weak/ambiguous pluck fades the node without hiding the
+  // wiggle. That split also makes the spike self-diagnosing: a wiggle with no node means
+  // the estimator, not the render, came up short.
   let waveD = $state<string[]>(Array(6).fill(''));
   let node = $state(Array.from({ length: 6 }, () => ({ x: 0.5, o: 0 })));
-  const wave = Array.from({ length: 6 }, () => ({ amp: 0, pluck: 0.2, bloom: 0 }));
+  const wave = Array.from({ length: 6 }, () => ({ amp: 0, pluck: 0.2, strength: 0, bloom: 0 }));
 
   function samplePath(amp: number, pluck: number, phase: number) {
     const N = 28,
@@ -139,22 +140,18 @@
         nArr = node.map((n) => ({ ...n }));
       next.forEach((s, i) => {
         const w = wave[i];
-        const live =
-          (s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned') &&
-          (s.pluckStrength ?? 0) >= STRENGTH_FLOOR;
-        if (live) {
+        const measured = s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned';
+        if (measured) {
           if (w.amp < 0.05) w.bloom = 1; // fresh attack
-          w.pluck += ((s.pluck ?? 0.2) - w.pluck) * Math.min(1, dt * 6);
+          w.pluck += ((s.pluck ?? w.pluck) - w.pluck) * Math.min(1, dt * 6);
         }
-        const targetAmp = live ? Math.max(0.15, s.level ?? 0) : 0;
+        w.strength += ((measured ? (s.pluckStrength ?? 0) : 0) - w.strength) * Math.min(1, dt * 4);
+        const targetAmp = measured ? Math.max(0.2, s.level ?? 0) : 0;
         w.amp += (targetAmp - w.amp) * Math.min(1, dt * (targetAmp > w.amp ? 12 : 3));
         w.bloom = Math.max(0, w.bloom - dt * 2);
         if (w.amp > 0.02) sounding = true;
         dArr[i] = samplePath(w.amp, w.pluck, phase);
-        nArr[i] = {
-          x: w.pluck,
-          o: Math.min(1, w.amp * 1.4) * (0.35 + 0.65 * w.bloom) * (live || w.amp > 0.02 ? 1 : 0),
-        };
+        nArr[i] = { x: w.pluck, o: Math.min(1, w.amp * 1.6) * (0.4 + 0.6 * w.bloom) * w.strength };
       });
       waveD = dArr;
       node = nArr;
