@@ -102,6 +102,67 @@
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
   });
+
+  // --- pluck-location string lines (spike) ---------------------------------
+  // Each sounding string draws a travelling wiggle whose envelope bulges at the
+  // measured pluck point, with a soft node that blooms on the attack and fades.
+  const STRENGTH_FLOOR = 0.28;
+  let waveD = $state<string[]>(Array(6).fill(''));
+  let node = $state(Array.from({ length: 6 }, () => ({ x: 0.5, o: 0 })));
+  const wave = Array.from({ length: 6 }, () => ({ amp: 0, pluck: 0.2, bloom: 0 }));
+
+  function samplePath(amp: number, pluck: number, phase: number) {
+    const N = 28,
+      p = Math.min(0.98, Math.max(0.02, pluck));
+    let d = '';
+    for (let k = 0; k <= N; k++) {
+      const u = k / N,
+        // Triangle envelope peaked at the pluck point: the string's own plucked shape.
+        env = u < p ? u / p : (1 - u) / (1 - p),
+        y = 12 - amp * 9 * env * Math.sin(2 * Math.PI * 1.5 * u + phase);
+      d += `${k ? 'L' : 'M'}${(u * 100).toFixed(1)} ${y.toFixed(2)}`;
+    }
+    return d;
+  }
+
+  $effect(() => {
+    const next = readings;
+    if (!active || hidden) return;
+    let frame = 0,
+      previous = 0;
+    const step = (time: number) => {
+      const dt = previous ? Math.min(0.05, (time - previous) / 1000) : 0;
+      previous = time;
+      const phase = reduced ? 0 : (time / 1000) * 7;
+      let sounding = false;
+      const dArr = waveD.slice(),
+        nArr = node.map((n) => ({ ...n }));
+      next.forEach((s, i) => {
+        const w = wave[i];
+        const live =
+          (s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned') &&
+          (s.pluckStrength ?? 0) >= STRENGTH_FLOOR;
+        if (live) {
+          if (w.amp < 0.05) w.bloom = 1; // fresh attack
+          w.pluck += ((s.pluck ?? 0.2) - w.pluck) * Math.min(1, dt * 6);
+        }
+        const targetAmp = live ? Math.max(0.15, s.level ?? 0) : 0;
+        w.amp += (targetAmp - w.amp) * Math.min(1, dt * (targetAmp > w.amp ? 12 : 3));
+        w.bloom = Math.max(0, w.bloom - dt * 2);
+        if (w.amp > 0.02) sounding = true;
+        dArr[i] = samplePath(w.amp, w.pluck, phase);
+        nArr[i] = {
+          x: w.pluck,
+          o: Math.min(1, w.amp * 1.4) * (0.35 + 0.65 * w.bloom) * (live || w.amp > 0.02 ? 1 : 0),
+        };
+      });
+      waveD = dArr;
+      node = nArr;
+      if (sounding) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  });
 </script>
 
 <div class="intro">
@@ -142,7 +203,58 @@
             class="reading">{labels[s.state]}</span
           ><span class="reading-detail">{detail(s)}</span>
         </div>
+        <svg
+          class="string-line"
+          viewBox="0 0 100 24"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          data-lit={String(node[i].o > 0.02)}
+        >
+          <path class="wave" d={waveD[i]} style:opacity={0.25 + 0.75 * Math.min(1, node[i].o)} />
+          <circle
+            class="pluck-node"
+            cx={node[i].x * 100}
+            cy="12"
+            r={2.2 + 2.6 * node[i].o}
+            style:opacity={node[i].o}
+          />
+        </svg>
       </div>
     {/each}
   </div>
 </div>
+
+<style>
+  .string-line {
+    display: block;
+    width: 100%;
+    height: 1.4rem;
+    margin-top: 0.15rem;
+    overflow: visible;
+    color: var(--line, #8a8f98);
+  }
+  .string-line .wave {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    transition: stroke 0.3s ease;
+  }
+  .string-line .pluck-node {
+    fill: var(--accent, #3ddc84);
+    filter: drop-shadow(0 0 3px var(--accent, #3ddc84));
+  }
+  /* Lit strings glow toward the accent; a resting string is the faint baseline. */
+  .string-line[data-lit='true'] .wave {
+    stroke: color-mix(in srgb, var(--accent, #3ddc84) 55%, var(--ink, #eceef0));
+  }
+  :global(.string[data-state='tuned']) .string-line .pluck-node {
+    fill: var(--accent, #3ddc84);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .string-line .wave {
+      transition: none;
+    }
+  }
+</style>

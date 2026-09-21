@@ -34,6 +34,11 @@ export interface PitchReading extends StringTarget {
   measuredHz: number;
   peakDb: number;
   tracking?: boolean;
+  // Pluck location along the string, 0 = bridge, 1 = nut, estimated from the
+  // harmonic comb. Bridge/nut mirror is unresolved, so this is the near-bridge
+  // half (<= 0.5). Absent when the comb is too weak to place it.
+  pluck?: number;
+  pluckStrength?: number;
 }
 export type Reading = QuietReading | PitchReading;
 export interface DisplayReading extends StringTarget {
@@ -45,6 +50,8 @@ export interface DisplayReading extends StringTarget {
   peakDb?: number;
   tracking?: boolean;
   held?: boolean;
+  pluck?: number;
+  pluckStrength?: number;
 }
 export interface Peak {
   hz: number;

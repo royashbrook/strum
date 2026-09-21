@@ -66,6 +66,56 @@ export function spectralPeaks(db: Float32Array, sampleRate: number, rejection: n
   return { binHz, prominent, rawPeaks };
 }
 
+// Where a string is plucked shapes its harmonic comb: a pluck at fraction p of the
+// length drives partial n by |sin(n*pi*p)|, so the harmonics near 1/p, 2/p ... are
+// nulled. Read that back: flatten each harmonic's ideal 1/n rolloff and its own
+// neighbourhood (which removes mic/string colour, leaving only the comb dips), then
+// find the p whose |sin(n*pi*p)| dips line up with the measured ones.
+//
+// Two honest limits, by design: p and 1-p null the SAME harmonics, so this cannot tell
+// bridge-side from nut-side and always reports the near-bridge half (p <= 0.5); and it
+// resolves to roughly 1/N, so it is a flavour estimate, never a measurement. `strength`
+// (0..1) is how convincingly a null was actually present; a caller shows nothing when it
+// is low. `db` is indexed by harmonic, index 0 = the fundamental, null = absent (a null).
+export function estimatePluck(db: (number | null)[]): { pluck: number; strength: number } {
+  const flat = db.map((d, i) => (d == null ? 0 : 10 ** (d / 20) * (i + 1)));
+  // Relative to each partial's neighbours, so a genuine dip survives and smooth colour cancels.
+  const q = flat.map((c, n) => {
+    const lo = flat[n - 1],
+      hi = flat[n + 1],
+      base = ((lo || 0) + (hi || 0)) / ((lo ? 1 : 0) + (hi ? 1 : 0) || 1);
+    return base > 0 ? c / base : 1;
+  });
+  // Every harmonic the caller sampled is in range, so an absent one is a real null and
+  // must stay in (it is the dip that carries the pluck point); only the unreliable
+  // fundamental is dropped. The gate wants enough PRESENT partials for a real note.
+  const idx = q.map((_, n) => n).filter((n) => n >= 1);
+  const present = idx.filter((n) => flat[n] > 0).length;
+  const dip = Math.min(1, ...idx.map((n) => q[n]));
+  if (present < 3 || dip > 0.6) return { pluck: 0.5, strength: 0 };
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const qbar = mean(idx.map((n) => q[n]));
+  let best = { pluck: 0.5, strength: 0 };
+  for (let p = 0.06; p <= 0.5001; p += 0.004) {
+    const s = idx.map((n) => Math.abs(Math.sin((n + 1) * Math.PI * p)));
+    const sbar = mean(s);
+    let num = 0,
+      dq = 0,
+      ds = 0;
+    idx.forEach((n, k) => {
+      const a = q[n] - qbar,
+        b = s[k] - sbar;
+      num += a * b;
+      dq += a * a;
+      ds += b * b;
+    });
+    const r = dq > 0 && ds > 0 ? num / Math.sqrt(dq * ds) : 0;
+    if (r > best.strength) best = { pluck: p, strength: r };
+  }
+  // Fold the correlation with the null depth: a shallow-but-correlated comb is weak.
+  return { pluck: best.pluck, strength: clamp(best.strength * (1 - dip), 0, 1) };
+}
+
 export function analyseSpectrum(
   db: Float32Array,
   sampleRate: number,
@@ -156,12 +206,22 @@ export function analyseSpectrum(
       return support >= 2;
     });
     const cents = 1200 * Math.log2(best.hz / string.hz);
+    // Sample the harmonic ladder (fundamental first) for the pluck-comb read. A partial
+    // that is absent from the peak list is a real null, so it stays null here.
+    const ladder: (number | null)[] = [];
+    for (let h = 1; best.hz * h < 2100; h++) {
+      const p = near(best.hz * h, Math.max(binHz * 1.7, best.hz * h * 0.004));
+      ladder.push(p ? p.db : null);
+    }
+    const { pluck, strength } = estimatePluck(ladder);
     output[i] = {
       ...string,
       measuredHz: best.hz,
       peakDb: best.db,
       confidence: missingLower ? 0 : best.confidence,
       level: clamp((best.db - loudest + 40) / 40, 0, 1),
+      pluck,
+      pluckStrength: strength,
       cents,
       state:
         missingLower || best.confidence === 0 || best.confidence < config.rejection
