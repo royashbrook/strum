@@ -153,7 +153,9 @@
         const targetAmp = measured ? Math.max(0.2, s.level ?? 0) : 0;
         w.amp += (targetAmp - w.amp) * Math.min(1, dt * (targetAmp > w.amp ? 12 : 3));
         w.bloom = Math.max(0, w.bloom - dt * 2);
-        if (w.amp > 0.02) sounding = true;
+        // Keep animating while there is anywhere to go, not only once we have moved: the
+        // first frame has dt=0, so an amp-only check stopped the loop before it started.
+        if (targetAmp > 0 || w.amp > 0.02) sounding = true;
         dArr[i] = samplePath(w.amp, w.pluck, phase);
         nArr[i] = {
           y: 1 - w.pluck,
