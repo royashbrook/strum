@@ -109,19 +109,23 @@
   // wiggle. That split also makes the spike self-diagnosing: a wiggle with no node means
   // the estimator, not the render, came up short.
   let waveD = $state<string[]>(Array(6).fill(''));
-  let node = $state(Array.from({ length: 6 }, () => ({ x: 0.5, o: 0 })));
+  let node = $state(Array.from({ length: 6 }, () => ({ y: 0.8, o: 0 })));
   const wave = Array.from({ length: 6 }, () => ({ amp: 0, pluck: 0.2, strength: 0, bloom: 0 }));
 
+  // The string runs VERTICALLY down the pitch lane (bridge at the bottom, nut at the top),
+  // so the wiggle is a horizontal displacement of that line and the pluck point sits at a
+  // height along it. viewBox is 24 wide (centre x=12) by 100 tall.
   function samplePath(amp: number, pluck: number, phase: number) {
-    const N = 28,
-      p = Math.min(0.98, Math.max(0.02, pluck));
+    const N = 30,
+      p = Math.min(0.98, Math.max(0.02, pluck)),
+      nodeV = 1 - p; // near-bridge pluck -> low on the lane
     let d = '';
     for (let k = 0; k <= N; k++) {
-      const u = k / N,
+      const v = k / N,
         // Triangle envelope peaked at the pluck point: the string's own plucked shape.
-        env = u < p ? u / p : (1 - u) / (1 - p),
-        y = 12 - amp * 9 * env * Math.sin(2 * Math.PI * 1.5 * u + phase);
-      d += `${k ? 'L' : 'M'}${(u * 100).toFixed(1)} ${y.toFixed(2)}`;
+        env = v < nodeV ? v / nodeV : (1 - v) / (1 - nodeV),
+        x = 12 + amp * 10 * env * Math.sin(2 * Math.PI * 1.5 * v + phase);
+      d += `${k ? 'L' : 'M'}${x.toFixed(2)} ${(v * 100).toFixed(1)}`;
     }
     return d;
   }
@@ -151,7 +155,10 @@
         w.bloom = Math.max(0, w.bloom - dt * 2);
         if (w.amp > 0.02) sounding = true;
         dArr[i] = samplePath(w.amp, w.pluck, phase);
-        nArr[i] = { x: w.pluck, o: Math.min(1, w.amp * 1.6) * (0.4 + 0.6 * w.bloom) * w.strength };
+        nArr[i] = {
+          y: 1 - w.pluck,
+          o: Math.min(1, w.amp * 1.6) * (0.4 + 0.6 * w.bloom) * w.strength,
+        };
       });
       waveD = dArr;
       node = nArr;
@@ -181,6 +188,22 @@
       >
         <div class="pitch-lane" aria-hidden="true">
           <span class="rail"></span><span class="target"></span>
+          <svg
+            class="string-line"
+            viewBox="0 0 24 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            data-lit={String(node[i].o > 0.02)}
+          >
+            <path class="wave" d={waveD[i]} style:opacity={0.3 + 0.7 * Math.min(1, node[i].o)} />
+            <circle
+              class="pluck-node"
+              cx="12"
+              cy={node[i].y * 100}
+              r={2.4 + 3 * node[i].o}
+              style:opacity={node[i].o}
+            />
+          </svg>
           <span class="pitch-position" style:transform={`translateY(${-positions[i] * 0.48}%)`}>
             <span class="bead"
               ><span class="direction"
@@ -200,22 +223,6 @@
             class="reading">{labels[s.state]}</span
           ><span class="reading-detail">{detail(s)}</span>
         </div>
-        <svg
-          class="string-line"
-          viewBox="0 0 100 24"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-          data-lit={String(node[i].o > 0.02)}
-        >
-          <path class="wave" d={waveD[i]} style:opacity={0.25 + 0.75 * Math.min(1, node[i].o)} />
-          <circle
-            class="pluck-node"
-            cx={node[i].x * 100}
-            cy="12"
-            r={2.2 + 2.6 * node[i].o}
-            style:opacity={node[i].o}
-          />
-        </svg>
       </div>
     {/each}
   </div>
@@ -223,11 +230,12 @@
 
 <style>
   .string-line {
-    display: block;
+    position: absolute;
+    inset: 0;
     width: 100%;
-    height: 1.4rem;
-    margin-top: 0.15rem;
+    height: 100%;
     overflow: visible;
+    pointer-events: none;
     color: var(--line, #8a8f98);
   }
   .string-line .wave {
