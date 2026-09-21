@@ -30,3 +30,20 @@ test('always returns the near-bridge half, so p and 1-p do not disagree', () => 
   assert.ok(near.pluck <= 0.5 && far.pluck <= 0.5);
   assert.ok(Math.abs(near.pluck - far.pluck) < 0.02); // the mirror lands in one place
 });
+
+// The renderer draws each string as the sum of its own partials, so the detector must
+// hand them over and they must follow the spectrum, not a fixed template.
+import { analyseSpectrum, STRINGS, FFT_SIZE } from '../src/lib/analysis.ts';
+import { spectrum } from './spectrum.js';
+test('a reading carries its partials, and a nulled harmonic shows up as a hole', () => {
+  const full = analyseSpectrum(spectrum([[0, 0]]), 48000, -20)[0];
+  assert.ok(full.partials.length >= 4 && full.partials[0] > 0.9, JSON.stringify(full.partials));
+  const bins = spectrum([[0, 0]]);
+  const peak = ((STRINGS[0].hz * 3) / 48000) * FFT_SIZE;
+  for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++) bins[b] = -120;
+  const holed = analyseSpectrum(bins, 48000, -20)[0];
+  assert.ok(
+    holed.partials[2] < 0.05 && full.partials[2] > 0.1,
+    `partial 3: ${full.partials[2]} -> ${holed.partials[2]}`,
+  );
+});

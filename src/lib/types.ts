@@ -39,6 +39,9 @@ export interface PitchReading extends StringTarget {
   // half (<= 0.5). Absent when the comb is too weak to place it.
   pluck?: number;
   pluckStrength?: number;
+  // Linear amplitude of partials 1..6 relative to the strongest, for drawing the string's
+  // own vibration shape.
+  partials?: number[];
 }
 export type Reading = QuietReading | PitchReading;
 export interface DisplayReading extends StringTarget {
@@ -52,6 +55,7 @@ export interface DisplayReading extends StringTarget {
   held?: boolean;
   pluck?: number;
   pluckStrength?: number;
+  partials?: number[];
 }
 export interface Peak {
   hz: number;

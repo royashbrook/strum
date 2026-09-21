@@ -109,22 +109,33 @@
   // wiggle. That split also makes the spike self-diagnosing: a wiggle with no node means
   // the estimator, not the render, came up short.
   let waveD = $state<string[]>(Array(6).fill(''));
-  let node = $state(Array.from({ length: 6 }, () => ({ y: 0.8, o: 0 })));
-  const wave = Array.from({ length: 6 }, () => ({ amp: 0, pluck: 0.2, strength: 0, bloom: 0 }));
+  let node = $state(Array.from({ length: 6 }, () => ({ y: 0.8, o: 0, spark: 0 })));
+  const wave = Array.from({ length: 6 }, () => ({
+    amp: 0,
+    pluck: 0.2, // LOCKED on the attack, held until the string rests (never tracked live)
+    strength: 0,
+    spark: 0,
+    partials: [1, 0, 0, 0, 0, 0] as number[],
+  }));
 
-  // The string runs VERTICALLY down the pitch lane (bridge at the bottom, nut at the top),
-  // so the wiggle is a horizontal displacement of that line and the pluck point sits at a
-  // height along it. viewBox is 24 wide (centre x=12) by 100 tall.
-  function samplePath(amp: number, pluck: number, phase: number) {
-    const N = 30,
-      p = Math.min(0.98, Math.max(0.02, pluck)),
-      nodeV = 1 - p; // near-bridge pluck -> low on the lane
+  // The string runs VERTICALLY down the pitch lane (bridge at the bottom, nut at the top).
+  // Its shape is the sum of its own measured modes, partial n as sin(n*pi*v) swinging at n
+  // times the base rate, so a bright string looks jagged and a dull one looks like a bow,
+  // and the pluck comb sculpts it for free. Base rate scales with the string's pitch so a
+  // low E sways slower than a high E. viewBox is 24 wide (centre x=12) by 100 tall.
+  function samplePath(amp: number, partials: number[], hz: number, t: number) {
+    const N = 32,
+      rate = 2.2 * Math.sqrt(hz / 110),
+      norm = partials.reduce((a, b) => a + b, 0) || 1;
     let d = '';
     for (let k = 0; k <= N; k++) {
-      const v = k / N,
-        // Triangle envelope peaked at the pluck point: the string's own plucked shape.
-        env = v < nodeV ? v / nodeV : (1 - v) / (1 - nodeV),
-        x = 12 + amp * 10 * env * Math.sin(2 * Math.PI * 1.5 * v + phase);
+      const v = k / N;
+      let y = 0;
+      partials.forEach((a, j) => {
+        const n = j + 1;
+        y += (a / norm) * Math.sin(n * Math.PI * v) * Math.cos(n * rate * t + n * 0.9);
+      });
+      const x = 12 + amp * 12 * y;
       d += `${k ? 'L' : 'M'}${x.toFixed(2)} ${(v * 100).toFixed(1)}`;
     }
     return d;
@@ -138,28 +149,41 @@
     const step = (time: number) => {
       const dt = previous ? Math.min(0.05, (time - previous) / 1000) : 0;
       previous = time;
-      const phase = reduced ? 0 : (time / 1000) * 7;
+      const t = reduced ? 0 : time / 1000;
       let sounding = false;
       const dArr = waveD.slice(),
         nArr = node.map((n) => ({ ...n }));
       next.forEach((s, i) => {
         const w = wave[i];
-        const measured = s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned';
+        // A held reading is the memory of a note that already died, not sound.
+        const measured =
+          !s.held && (s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned');
         if (measured) {
-          if (w.amp < 0.05) w.bloom = 1; // fresh attack
-          w.pluck += ((s.pluck ?? w.pluck) - w.pluck) * Math.min(1, dt * 6);
+          // ATTACK: the string was at rest and now sounds. Lock the pluck point from this
+          // first read and fire the sparkle. It stays put until the string rests again;
+          // the live estimate keeps drifting as harmonics decay and we ignore that.
+          if (w.amp < 0.05) {
+            w.pluck = s.pluck ?? 0.2;
+            w.strength = Math.max(0.3, s.pluckStrength ?? 0);
+            w.spark = 1;
+          }
+          const p = s.partials ?? w.partials;
+          w.partials = w.partials.map((a, j) => a + ((p[j] ?? 0) - a) * Math.min(1, dt * 8));
         }
-        w.strength += ((measured ? (s.pluckStrength ?? 0) : 0) - w.strength) * Math.min(1, dt * 4);
         const targetAmp = measured ? Math.max(0.2, s.level ?? 0) : 0;
         w.amp += (targetAmp - w.amp) * Math.min(1, dt * (targetAmp > w.amp ? 12 : 3));
-        w.bloom = Math.max(0, w.bloom - dt * 2);
+        // Come fully to rest, so the last frame is a straight line and the next note is a
+        // clean attack (which re-locks the pluck mark).
+        if (targetAmp === 0 && w.amp <= 0.02) w.amp = 0;
+        w.spark = Math.max(0, w.spark - dt * 1.6);
         // Keep animating while there is anywhere to go, not only once we have moved: the
         // first frame has dt=0, so an amp-only check stopped the loop before it started.
         if (targetAmp > 0 || w.amp > 0.02) sounding = true;
-        dArr[i] = samplePath(w.amp, w.pluck, phase);
+        dArr[i] = samplePath(w.amp, w.partials, s.hz, t);
         nArr[i] = {
           y: 1 - w.pluck,
-          o: Math.min(1, w.amp * 1.6) * (0.4 + 0.6 * w.bloom) * w.strength,
+          o: w.amp > 0.02 ? w.strength * Math.min(1, w.amp * 1.6) : 0,
+          spark: w.spark,
         };
       });
       waveD = dArr;
@@ -198,13 +222,26 @@
             data-lit={String(node[i].o > 0.02)}
           >
             <path class="wave" d={waveD[i]} style:opacity={0.3 + 0.7 * Math.min(1, node[i].o)} />
-            <circle
+            <!-- pluck mark: a small tick at the locked height, plus a sparkle that
+                 flares on the attack and dies down, no round glow -->
+            <g
               class="pluck-node"
-              cx="12"
-              cy={node[i].y * 100}
-              r={2.4 + 3 * node[i].o}
+              transform={`translate(12 ${(node[i].y * 100).toFixed(1)})`}
               style:opacity={node[i].o}
-            />
+            >
+              <line class="tick" x1="-3.2" x2="3.2" y1="0" y2="0" />
+              <g class="sparkle" style:opacity={node[i].spark}>
+                {#each [0, 60, 120, 180, 240, 300] as deg}
+                  <line
+                    x1="0"
+                    y1={-(1.2 + 4.5 * node[i].spark)}
+                    x2="0"
+                    y2={-(0.4 + 1.5 * node[i].spark)}
+                    transform={`rotate(${deg})`}
+                  />
+                {/each}
+              </g>
+            </g>
           </svg>
           <span class="pitch-position" style:transform={`translateY(${-positions[i] * 0.48}%)`}>
             <span class="bead"
@@ -248,16 +285,20 @@
     vector-effect: non-scaling-stroke;
     transition: stroke 0.3s ease;
   }
-  .string-line .pluck-node {
-    fill: var(--accent, #3ddc84);
-    filter: drop-shadow(0 0 3px var(--accent, #3ddc84));
+  .string-line .pluck-node line {
+    stroke: var(--accent, #3ddc84);
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .string-line .pluck-node .tick {
+    stroke-width: 2.2;
+  }
+  .string-line .sparkle line {
+    stroke-width: 1.3;
   }
   /* Lit strings glow toward the accent; a resting string is the faint baseline. */
   .string-line[data-lit='true'] .wave {
     stroke: color-mix(in srgb, var(--accent, #3ddc84) 55%, var(--ink, #eceef0));
-  }
-  :global(.string[data-state='tuned']) .string-line .pluck-node {
-    fill: var(--accent, #3ddc84);
   }
   @media (prefers-reduced-motion: reduce) {
     .string-line .wave {

@@ -214,6 +214,10 @@ export function analyseSpectrum(
       ladder.push(p ? p.db : null);
     }
     const { pluck, strength } = estimatePluck(ladder);
+    // The first six partials as linear amplitudes relative to the strongest, so the UI can
+    // draw this string's own vibration (a sum of its modes) instead of a generic wave.
+    const linear = ladder.slice(0, 6).map((d) => (d == null ? 0 : 10 ** (d / 20)));
+    const top = Math.max(...linear, 1e-9);
     output[i] = {
       ...string,
       measuredHz: best.hz,
@@ -222,6 +226,7 @@ export function analyseSpectrum(
       level: clamp((best.db - loudest + 40) / 40, 0, 1),
       pluck,
       pluckStrength: strength,
+      partials: linear.map((a) => a / top),
       cents,
       state:
         missingLower || best.confidence === 0 || best.confidence < config.rejection
