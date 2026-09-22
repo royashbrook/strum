@@ -73,7 +73,37 @@ test('two strings with different harmonic content draw different shapes', async 
   expect(diff).toBeGreaterThan(0.04);
 });
 
-test('the pluck mark locks on the attack and holds while the string rings', async ({ page }) => {
+test('a strum shares one pluck spot across its strings', async ({ page }) => {
+  // E reads as a 1/4 pluck and A as a 1/3 pluck, but they attacked together: one hand,
+  // one spot, so both marks land at the same height (the median).
+  const bins = spectrum([
+    [0, 0],
+    [1, 0],
+  ]);
+  for (const [i, h] of [
+    [0, 4],
+    [0, 8],
+    [1, 3],
+    [1, 6],
+  ]) {
+    const peak = ((STRINGS[i].hz * h) / 48000) * FFT_SIZE;
+    for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++) bins[b] = -120;
+  }
+  await listen(page, bins);
+  const e = page.locator('.string').nth(0).locator('.string-line .pluck-node'),
+    a = page.locator('.string').nth(1).locator('.string-line .pluck-node');
+  await expect
+    .poll(async () => Number(await e.evaluate((n) => n.style.opacity)))
+    .toBeGreaterThan(0.1);
+  await expect
+    .poll(async () => Number(await a.evaluate((n) => n.style.opacity)))
+    .toBeGreaterThan(0.1);
+  expect(await markY(e)).toBe(await markY(a));
+});
+
+test('the pluck mark locks after the attack window and holds while the string rings', async ({
+  page,
+}) => {
   await listen(page, plucked(0, 4)); // pluck at 1/4: mark low on the lane
   const string = page.locator('.string').nth(0);
   await expect(string).toHaveAttribute('data-state', 'tuned');

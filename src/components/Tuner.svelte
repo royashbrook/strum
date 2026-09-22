@@ -110,12 +110,22 @@
   // the estimator, not the render, came up short.
   let waveD = $state<string[]>(Array(6).fill(''));
   let node = $state(Array.from({ length: 6 }, () => ({ y: 0.8, o: 0, spark: 0 })));
+  // The pluck mark is a place on the neck, so it must be the same for every string in a
+  // strum and must not chase the note as it fades. It is read during a short attack
+  // window (the first frame of a 683 ms analysis is half silence, the worst comb to read),
+  // keeping the most confident estimate, then LOCKED until the string rests. Strings that
+  // attack within a quarter second are one hand at one spot and share the median.
+  const ATTACK_WINDOW = 0.4,
+    STRUM_WINDOW = 0.25;
   const wave = Array.from({ length: 6 }, () => ({
     amp: 0,
-    pluck: 0.2, // LOCKED on the attack, held until the string rests (never tracked live)
+    pluck: 0.2,
     strength: 0,
     spark: 0,
     partials: [1, 0, 0, 0, 0, 0] as number[],
+    attackAt: -1, // time the string started sounding, -1 = at rest
+    locked: false,
+    lockedAt: -1,
   }));
 
   // The string runs VERTICALLY down the pitch lane (bridge at the bottom, nut at the top).
@@ -159,16 +169,41 @@
         const measured =
           !s.held && (s.state === 'flat' || s.state === 'sharp' || s.state === 'tuned');
         if (measured) {
-          // ATTACK: the string was at rest and now sounds. Lock the pluck point from this
-          // first read and fire the sparkle. It stays put until the string rests again;
-          // the live estimate keeps drifting as harmonics decay and we ignore that.
-          if (w.amp < 0.05) {
-            w.pluck = s.pluck ?? 0.2;
-            w.strength = Math.max(0.3, s.pluckStrength ?? 0);
-            w.spark = 1;
+          const now = time / 1000;
+          if (w.attackAt < 0) {
+            // ATTACK: the string was at rest and now sounds. Open the read window.
+            w.attackAt = now;
+            w.locked = false;
+            w.strength = 0;
+          }
+          if (!w.locked) {
+            const str = s.pluckStrength ?? 0;
+            if (str > w.strength) {
+              w.strength = str;
+              w.pluck = s.pluck ?? 0.2;
+            }
+            if (now - w.attackAt >= ATTACK_WINDOW) {
+              // LOCK. The mark shows from here and does not move until the string rests.
+              w.locked = true;
+              w.lockedAt = now;
+              w.strength = Math.max(0.3, w.strength);
+              w.spark = 1;
+              // Strum consensus: everything locked within STRUM_WINDOW shares the median.
+              const group = wave.filter(
+                (o) => o.locked && Math.abs(o.lockedAt - now) < STRUM_WINDOW,
+              );
+              if (group.length > 1) {
+                const ps = group.map((o) => o.pluck).sort((a, b) => a - b),
+                  mid = ps[Math.floor(ps.length / 2)];
+                group.forEach((o) => (o.pluck = mid));
+              }
+            }
           }
           const p = s.partials ?? w.partials;
           w.partials = w.partials.map((a, j) => a + ((p[j] ?? 0) - a) * Math.min(1, dt * 8));
+        } else if (w.amp === 0) {
+          w.attackAt = -1;
+          w.locked = false;
         }
         const targetAmp = measured ? Math.max(0.2, s.level ?? 0) : 0;
         w.amp += (targetAmp - w.amp) * Math.min(1, dt * (targetAmp > w.amp ? 12 : 3));
@@ -182,7 +217,7 @@
         dArr[i] = samplePath(w.amp, w.partials, s.hz, t);
         nArr[i] = {
           y: 1 - w.pluck,
-          o: w.amp > 0.02 ? w.strength * Math.min(1, w.amp * 1.6) : 0,
+          o: w.locked && w.amp > 0.02 ? w.strength * Math.min(1, w.amp * 1.6) : 0,
           spark: w.spark,
         };
       });
