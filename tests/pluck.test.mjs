@@ -62,7 +62,7 @@ const combed = (i, p, rate = 48000) => {
   return bins;
 };
 for (const i of [0, 2, 5])
-  for (const p of [0.15, 0.2, 0.25, 1 / 3, 0.5])
+  for (const p of [0.15, 0.19, 0.2, 0.22, 0.25, 1 / 3, 0.5])
     test(`string ${i} plucked at ${p.toFixed(2)} reads back within 0.05`, () => {
       const r = analyseSpectrum(combed(i, p), 48000, -20)[i];
       assert.ok(Math.abs(r.pluck - p) < 0.05, `read ${r.pluck} strength ${r.pluckStrength}`);

@@ -77,58 +77,78 @@ export function spectralPeaks(db: Float32Array, sampleRate: number, rejection: n
 // resolves to roughly 1/N, so it is a flavour estimate, never a measurement. `strength`
 // (0..1) is how convincingly a null was actually present; a caller shows nothing when it
 // is low. `db` is indexed by harmonic, index 0 = the fundamental, null = absent (a null).
-export function estimatePluck(db: (number | null)[]): { pluck: number; strength: number } {
+export function estimatePluck(db: (number | null | undefined)[]): {
+  pluck: number;
+  strength: number;
+} {
   // A missing partial INSIDE the ladder is a pluck null. A trailing run of missing partials
   // is the mic's noise floor (or the top of the band), not a comb, and read as nulls it
   // drags every fit toward a small p. Keep the ladder to the last partial actually heard,
   // and to 12 at most: the comb lives in the low partials, the high ones are noise.
+  // `undefined` is a partial another sounding string also owns (open strings share many:
+  // E's 4th is A's 3rd), so it carries the neighbour's comb and is left out of the fit.
   let last = -1;
   db.forEach((d, i) => {
     if (d != null) last = i;
   });
   db = db.slice(0, Math.min(last + 1, 12));
-  const flat = db.map((d, i) => (d == null ? 0 : 10 ** (d / 20) * (i + 1)));
-  // Remove mic and string colour with a trend line fitted through the PRESENT partials
-  // (log-linear in harmonic number). A wide baseline like this keeps the comb's slow rise
-  // and fall between nulls, which is what tells a pluck at 1/5 from one at 2/5: their nulls
-  // coincide, only that shape differs. (A neighbour baseline erased it.)
-  const on = flat.map((c, n) => [n, c]).filter(([, c]) => c > 0) as [number, number][];
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const mx = mean(on.map(([n]) => n)),
-    my = mean(on.map(([, c]) => Math.log(c)));
-  const sxx = on.reduce((s, [n]) => s + (n - mx) ** 2, 0),
-    slope = sxx > 0 ? on.reduce((s, [n, c]) => s + (n - mx) * (Math.log(c) - my), 0) / sxx : 0;
-  const q = flat.map((c, n) => c / Math.exp(my + slope * (n - mx)));
-  // Every harmonic the caller sampled is in range, so an absent one is a real null and
-  // must stay in (it is the dip that carries the pluck point); only the unreliable
-  // fundamental is dropped. Two present partials are enough to fit a comb.
-  const idx = q.map((_, n) => n).filter((n) => n >= 1);
-  const present = idx.filter((n) => flat[n] > 0).length;
-  const dip = Math.min(1, ...idx.map((n) => q[n]));
-  if (present < 2 || dip > 0.6) return { pluck: 0.5, strength: 0 };
-  const qbar = mean(idx.map((n) => q[n]));
-  let best = { pluck: 0.5, strength: 0, score: -Infinity };
-  for (let p = 0.06; p <= 0.5001; p += 0.004) {
-    const s = idx.map((n) => Math.abs(Math.sin((n + 1) * Math.PI * p)));
-    const sbar = mean(s);
-    let num = 0,
-      dq = 0,
-      ds = 0;
+  const present = db.filter((d, i) => i >= 1 && d != null).length;
+  if (present < 2) return { pluck: 0.5, strength: 0 };
+  // Fit in decibels. A real finger never makes a perfect hole, it makes a dip, and a
+  // 16 dB dip is strong evidence for exactly the p that predicts a 16 dB dip; in linear
+  // magnitude 0.16 and 0 look alike and the partial null gets no say. The model for
+  // partial n is |sin(n*pi*p)| over the string's 1/n rolloff, floored at NULL_DB (finger
+  // width). Mic and string colour is a smooth tilt, so for each candidate p a line is fitted
+  // through the residual and the p with the least left over wins. A missing partial is a
+  // null at the floor. The fundamental stays IN the fit: without it, the 1/5 and 2/5
+  // combs (same null) differ by an almost straight tilt that the free slope absorbs;
+  // with it the difference is a zigzag no line can explain away.
+  const NULL_DB = -30;
+  // Rolloff removed, and a missing partial placed a full null below the ladder's own
+  // level (the raw dB scale is absolute, so a fixed number would not read as a dip).
+  const lifted = db.map((d, n) => (d == null ? null : d + 20 * Math.log10(n + 1)));
+  const ref = Math.max(...lifted.filter((v): v is number => v != null));
+  const heard = lifted.map((v) => (v === null ? ref + NULL_DB - 10 : (v as number)));
+  const idx = heard.map((_, n) => n).filter((n) => db[n] !== undefined);
+  const leftover = (model: (n: number) => number) => {
+    const r = idx.map((n) => heard[n] - model(n)),
+      mx = (idx.length - 1) / 2,
+      my = r.reduce((a, b) => a + b, 0) / r.length;
+    let sxx = 0,
+      sxy = 0;
     idx.forEach((n, k) => {
-      const a = q[n] - qbar,
-        b = s[k] - sbar;
-      num += a * b;
-      dq += a * a;
-      ds += b * b;
+      sxx += (n - mx) ** 2;
+      sxy += (n - mx) * (r[k] - my);
     });
-    const r = dq > 0 && ds > 0 ? num / Math.sqrt(dq * ds) : 0;
-    // The null series alone cannot tell k/N apart (a hole at harmonic 5 fits 1/5 and 2/5
-    // alike), so near-equal fits lean toward the bridge, where a hand actually plays.
-    const score = r - 0.05 * p;
-    if (score > best.score) best = { pluck: p, strength: r, score };
+    const slope = sxx > 0 ? sxy / sxx : 0;
+    return Math.sqrt(
+      idx.reduce((s, n, k) => s + (r[k] - my - slope * (n - mx)) ** 2, 0) / idx.length,
+    );
+  };
+  const flat = leftover(() => 0);
+  // No dip at all means no comb to read: a smooth rolloff must not be forced onto one.
+  {
+    const r = idx.map((n) => heard[n]),
+      mx = (idx.length - 1) / 2,
+      my = r.reduce((a, b) => a + b, 0) / r.length,
+      sxx = idx.reduce((s, n) => s + (n - mx) ** 2, 0),
+      slope = sxx > 0 ? idx.reduce((s, n, k) => s + (n - mx) * (r[k] - my), 0) / sxx : 0,
+      deepest = Math.min(...idx.map((n, k) => r[k] - my - slope * (n - mx)));
+    // 3 dB: a near-bridge pluck's first hole can sit past the heard ladder, leaving only
+    // the comb's swell, and that is still a read. A plain rolloff detrends to nothing.
+    if (deepest > -3) return { pluck: 0.5, strength: 0 };
   }
-  // Fold the correlation with the null depth: a shallow-but-correlated comb is weak.
-  return { pluck: best.pluck, strength: clamp(best.strength * (1 - dip), 0, 1) };
+  let best = { pluck: 0.5, rms: Infinity };
+  for (let p = 0.06; p <= 0.5001; p += 0.004) {
+    const rms = leftover((n) =>
+      Math.max(NULL_DB, 20 * Math.log10(Math.abs(Math.sin((n + 1) * Math.PI * p)) || 1e-9)),
+    );
+    // Near-equal fits lean toward the bridge, where a hand actually plays.
+    if (rms + 0.6 * p < best.rms + 0.6 * best.pluck) best = { pluck: p, rms };
+  }
+  // How much of the ladder's shape the comb explains, beyond a plain tilt.
+  const strength = flat > 0 ? clamp((flat - best.rms) / flat, 0, 1) : 0;
+  return { pluck: best.pluck, strength };
 }
 
 export function analyseSpectrum(
@@ -221,27 +241,12 @@ export function analyseSpectrum(
       return support >= 2;
     });
     const cents = 1200 * Math.log2(best.hz / string.hz);
-    // Sample the harmonic ladder (fundamental first) for the pluck-comb read. A partial
-    // that is absent from the peak list is a real null, so it stays null here.
-    const ladder: (number | null)[] = [];
-    for (let h = 1; best.hz * h < 2100; h++) {
-      const p = near(best.hz * h, Math.max(binHz * 1.7, best.hz * h * 0.004));
-      ladder.push(p ? p.db : null);
-    }
-    const { pluck, strength } = estimatePluck(ladder);
-    // The first six partials as linear amplitudes relative to the strongest, so the UI can
-    // draw this string's own vibration (a sum of its modes) instead of a generic wave.
-    const linear = ladder.slice(0, 6).map((d) => (d == null ? 0 : 10 ** (d / 20)));
-    const top = Math.max(...linear, 1e-9);
     output[i] = {
       ...string,
       measuredHz: best.hz,
       peakDb: best.db,
       confidence: missingLower ? 0 : best.confidence,
       level: clamp((best.db - loudest + 40) / 40, 0, 1),
-      pluck,
-      pluckStrength: strength,
-      partials: linear.map((a) => a / top),
       cents,
       state:
         missingLower || best.confidence === 0 || best.confidence < config.rejection
@@ -271,6 +276,37 @@ export function analyseSpectrum(
         upper.state = 'uncertain';
     }
   }
+  // Pluck reads come last, once every string's fate is known: a partial that another
+  // MEASURED string also owns (open strings share many, E's 4th is A's 3rd, E's 3rd is B's
+  // fundamental) carries that string's comb and is left out as unknown. Deciding this from
+  // the peak list alone was wrong: a lone low E's own overtones look like sounding B and E.
+  const sounding = output.map(
+    (o) => o.state === 'flat' || o.state === 'sharp' || o.state === 'tuned',
+  );
+  output.forEach((o, i) => {
+    if (!sounding[i] || !o.measuredHz) return;
+    const f0 = o.measuredHz,
+      ladder: (number | null | undefined)[] = [];
+    for (let h = 1; f0 * h < 2100; h++) {
+      const hz = f0 * h,
+        tol = Math.max(binHz * 1.7, hz * 0.004);
+      const shared = output.some((other, j) => {
+        if (j === i || !sounding[j] || !other.measuredHz) return false;
+        const k = Math.round(hz / other.measuredHz);
+        // A contested partial goes to the string for which it is the LOWER harmonic
+        // (lower partials are louder), so each pair loses it on only one side.
+        return k >= 1 && k < h && Math.abs(hz - k * other.measuredHz) < tol * 2;
+      });
+      const p = near(hz, tol);
+      ladder.push(shared ? undefined : p ? p.db : null);
+    }
+    const { pluck, strength } = estimatePluck(ladder);
+    // The first six partials as linear amplitudes relative to the strongest, so the UI can
+    // draw this string's own vibration (a sum of its modes) instead of a generic wave.
+    const linear = ladder.slice(0, 6).map((d) => (d == null ? 0 : 10 ** (d / 20)));
+    const top = Math.max(...linear, 1e-9);
+    Object.assign(o, { pluck, pluckStrength: strength, partials: linear.map((a) => a / top) });
+  });
   return output;
 }
 
