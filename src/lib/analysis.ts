@@ -78,24 +78,36 @@ export function spectralPeaks(db: Float32Array, sampleRate: number, rejection: n
 // (0..1) is how convincingly a null was actually present; a caller shows nothing when it
 // is low. `db` is indexed by harmonic, index 0 = the fundamental, null = absent (a null).
 export function estimatePluck(db: (number | null)[]): { pluck: number; strength: number } {
-  const flat = db.map((d, i) => (d == null ? 0 : 10 ** (d / 20) * (i + 1)));
-  // Relative to each partial's neighbours, so a genuine dip survives and smooth colour cancels.
-  const q = flat.map((c, n) => {
-    const lo = flat[n - 1],
-      hi = flat[n + 1],
-      base = ((lo || 0) + (hi || 0)) / ((lo ? 1 : 0) + (hi ? 1 : 0) || 1);
-    return base > 0 ? c / base : 1;
+  // A missing partial INSIDE the ladder is a pluck null. A trailing run of missing partials
+  // is the mic's noise floor (or the top of the band), not a comb, and read as nulls it
+  // drags every fit toward a small p. Keep the ladder to the last partial actually heard,
+  // and to 12 at most: the comb lives in the low partials, the high ones are noise.
+  let last = -1;
+  db.forEach((d, i) => {
+    if (d != null) last = i;
   });
+  db = db.slice(0, Math.min(last + 1, 12));
+  const flat = db.map((d, i) => (d == null ? 0 : 10 ** (d / 20) * (i + 1)));
+  // Remove mic and string colour with a trend line fitted through the PRESENT partials
+  // (log-linear in harmonic number). A wide baseline like this keeps the comb's slow rise
+  // and fall between nulls, which is what tells a pluck at 1/5 from one at 2/5: their nulls
+  // coincide, only that shape differs. (A neighbour baseline erased it.)
+  const on = flat.map((c, n) => [n, c]).filter(([, c]) => c > 0) as [number, number][];
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const mx = mean(on.map(([n]) => n)),
+    my = mean(on.map(([, c]) => Math.log(c)));
+  const sxx = on.reduce((s, [n]) => s + (n - mx) ** 2, 0),
+    slope = sxx > 0 ? on.reduce((s, [n, c]) => s + (n - mx) * (Math.log(c) - my), 0) / sxx : 0;
+  const q = flat.map((c, n) => c / Math.exp(my + slope * (n - mx)));
   // Every harmonic the caller sampled is in range, so an absent one is a real null and
   // must stay in (it is the dip that carries the pluck point); only the unreliable
-  // fundamental is dropped. The gate wants enough PRESENT partials for a real note.
+  // fundamental is dropped. Two present partials are enough to fit a comb.
   const idx = q.map((_, n) => n).filter((n) => n >= 1);
   const present = idx.filter((n) => flat[n] > 0).length;
   const dip = Math.min(1, ...idx.map((n) => q[n]));
-  if (present < 3 || dip > 0.6) return { pluck: 0.5, strength: 0 };
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  if (present < 2 || dip > 0.6) return { pluck: 0.5, strength: 0 };
   const qbar = mean(idx.map((n) => q[n]));
-  let best = { pluck: 0.5, strength: 0 };
+  let best = { pluck: 0.5, strength: 0, score: -Infinity };
   for (let p = 0.06; p <= 0.5001; p += 0.004) {
     const s = idx.map((n) => Math.abs(Math.sin((n + 1) * Math.PI * p)));
     const sbar = mean(s);
@@ -110,7 +122,10 @@ export function estimatePluck(db: (number | null)[]): { pluck: number; strength:
       ds += b * b;
     });
     const r = dq > 0 && ds > 0 ? num / Math.sqrt(dq * ds) : 0;
-    if (r > best.strength) best = { pluck: p, strength: r };
+    // The null series alone cannot tell k/N apart (a hole at harmonic 5 fits 1/5 and 2/5
+    // alike), so near-equal fits lean toward the bridge, where a hand actually plays.
+    const score = r - 0.05 * p;
+    if (score > best.score) best = { pluck: p, strength: r, score };
   }
   // Fold the correlation with the null depth: a shallow-but-correlated comb is weak.
   return { pluck: best.pluck, strength: clamp(best.strength * (1 - dip), 0, 1) };

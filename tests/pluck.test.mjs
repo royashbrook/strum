@@ -47,3 +47,24 @@ test('a reading carries its partials, and a nulled harmonic shows up as a hole',
     `partial 3: ${full.partials[2]} -> ${holed.partials[2]}`,
   );
 });
+
+// End to end through the detector on a physical comb (every partial scaled by
+// |sin(n*pi*p)|), across the low, middle and high strings, so a fixture's short ladder
+// or a mic's noise floor cannot pull the read off.
+const combed = (i, p, rate = 48000) => {
+  const bins = spectrum([[i, 0]], rate);
+  for (let h = 1; h <= 6; h++) {
+    const gain = 20 * Math.log10(Math.max(1e-6, Math.abs(Math.sin(h * Math.PI * p))));
+    const peak = ((STRINGS[i].hz * h) / rate) * FFT_SIZE;
+    for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++)
+      bins[b] = Math.max(-120, bins[b] + gain);
+  }
+  return bins;
+};
+for (const i of [0, 2, 5])
+  for (const p of [0.15, 0.2, 0.25, 1 / 3, 0.5])
+    test(`string ${i} plucked at ${p.toFixed(2)} reads back within 0.05`, () => {
+      const r = analyseSpectrum(combed(i, p), 48000, -20)[i];
+      assert.ok(Math.abs(r.pluck - p) < 0.05, `read ${r.pluck} strength ${r.pluckStrength}`);
+      assert.ok(r.pluckStrength > 0.2, `strength ${r.pluckStrength}`);
+    });

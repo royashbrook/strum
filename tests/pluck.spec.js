@@ -4,13 +4,23 @@ import { spectrum } from './spectrum.js';
 import { STRINGS, FFT_SIZE } from '../src/lib/analysis.ts';
 
 const setBins = (page, bins) => page.evaluate((b) => (window.testSpectrum = b), Array.from(bins));
-// The synthetic spectrum has no pluck comb, so null one harmonic to fake a pluck at 1/h.
-function plucked(index, h, rate = 48000) {
-  const bins = spectrum([[index, 0]], rate);
-  const peak = ((STRINGS[index].hz * h) / rate) * FFT_SIZE;
-  for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++) bins[b] = -120;
+// The synthetic spectrum has no pluck comb. Give it one the way a string does: partial n
+// scaled by |sin(n*pi*p)|, so a pluck at p thins the whole ladder and nulls harmonic 1/p.
+function combed(strings, rate = 48000) {
+  const bins = spectrum(
+    strings.map(([i]) => [i, 0]),
+    rate,
+  );
+  for (const [i, p] of strings)
+    for (let h = 1; h <= 6; h++) {
+      const gain = 20 * Math.log10(Math.max(1e-6, Math.abs(Math.sin(h * Math.PI * p))));
+      const peak = ((STRINGS[i].hz * h) / rate) * FFT_SIZE;
+      for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++)
+        bins[b] = Math.max(-120, bins[b] + gain);
+    }
   return bins;
 }
+const plucked = (index, h) => combed([[index, 1 / h]]);
 // x samples of the wave path: a resting string is all 12, a wiggling one is not.
 const xs = (d) => (d.match(/[ML]([\d.]+) /g) || []).map((m) => Number(m.slice(1)));
 const swing = (d) => Math.max(...xs(d).map((x) => Math.abs(x - 12)));
@@ -76,20 +86,13 @@ test('two strings with different harmonic content draw different shapes', async 
 test('a strum shares one pluck spot across its strings', async ({ page }) => {
   // E reads as a 1/4 pluck and A as a 1/3 pluck, but they attacked together: one hand,
   // one spot, so both marks land at the same height (the median).
-  const bins = spectrum([
-    [0, 0],
-    [1, 0],
-  ]);
-  for (const [i, h] of [
-    [0, 4],
-    [0, 8],
-    [1, 3],
-    [1, 6],
-  ]) {
-    const peak = ((STRINGS[i].hz * h) / 48000) * FFT_SIZE;
-    for (let b = Math.floor(peak) - 4; b <= Math.ceil(peak) + 4; b++) bins[b] = -120;
-  }
-  await listen(page, bins);
+  await listen(
+    page,
+    combed([
+      [0, 0.25],
+      [1, 1 / 3],
+    ]),
+  );
   const e = page.locator('.string').nth(0).locator('.string-line .pluck-node'),
     a = page.locator('.string').nth(1).locator('.string-line .pluck-node');
   await expect
