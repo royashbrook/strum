@@ -776,9 +776,17 @@ a {
   min-height: 44px;
   align-content: center;
 }
+/* the maker's mark reads like the royashbrook.com footer: made with ♥ by roy + ai · sponsor me,
+   the heart standing in for the word love (kept for screen readers), centered on every row */
 .mark {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0 0.3em;
   font-family: ui-monospace, monospace;
   font-size: 14px;
+  text-align: center;
 }
 .mark a {
   display: inline-flex;
@@ -786,6 +794,20 @@ a {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
+}
+.mark-heart {
+  width: 0.85em;
+  height: 0.85em;
+  fill: #e0746a;
+}
+.mark-dot {
+  opacity: 0.45;
+}
+/* the dot travels with sponsor me, so a narrow phone wraps "· sponsor me" as one piece */
+.mark-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0 0.3em;
 }
 #update-notice {
   position: fixed;

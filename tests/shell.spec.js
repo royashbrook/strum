@@ -10,6 +10,32 @@ test('quiet boot, compact version/about header, no microphone without a gesture'
   for(const size of [{width:390,height:844},{width:360,height:640},{width:430,height:932}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);for(const id of ['listen','nav-about']){const box=await page.locator('#'+id).boundingBox();expect(box.height).toBeGreaterThanOrEqual(44);expect(box.y+box.height).toBeLessThanOrEqual(size.height);}}
 });
 test('about keeps privacy guidance without prototype copy and returns focus',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#nav-about').click();await expect(page.locator('#about')).not.toContainText(/prototype|draft icon|Phone-test/i);await expect(page.locator('#about')).toContainText('never recorded or uploaded');await expect(page.locator('#about-title')).toBeFocused();await page.locator('#nav-about').click();await expect(page.locator('#listen')).toBeFocused();expect(await page.evaluate(()=>probe.requests)).toBe(0);});
+test('the maker mark reads made with, heart, by, and every row is centered',async({page})=>{
+  await fakeMic(page);await page.goto('/');await page.locator('#nav-about').click();
+  // the line in markup order: text as text, the svg as one token, its path not descended
+  const order=await page.locator('.mark').evaluate(line=>{const out=[];const walk=n=>{for(const c of n.childNodes){if(c.nodeType===3)out.push(c.textContent);else if(c.nodeName.toLowerCase()==='svg')out.push(' <svg> ');else walk(c);}};walk(line);return out.join('').replace(/\s+/g,' ').trim();});
+  expect(order).toMatch(/^made with <svg> (love )?by roy \+ ai · sponsor me$/);
+  for(const width of [390,320]){
+    await page.setViewportSize({width,height:844});
+    const rows=await page.locator('.mark').evaluate(line=>{
+      const tiny=el=>{for(let e=el;e&&e!==line;e=e.parentElement){const r=e.getBoundingClientRect();if(r.width<=1||r.height<=1)return true;}return false;};
+      const rects=[];
+      for(const el of line.querySelectorAll('*'))if(!tiny(el))for(const r of el.getClientRects())if(r.width>0)rects.push(r);
+      const texts=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);
+      for(let t;(t=texts.nextNode());){if(tiny(t.parentElement))continue;for(const m of t.textContent.matchAll(/\S+/g)){const range=document.createRange();range.setStart(t,m.index);range.setEnd(t,m.index+m[0].length);rects.push(...range.getClientRects());}}
+      const s=getComputedStyle(line),box=line.getBoundingClientRect();
+      const left=box.left+parseFloat(s.borderLeftWidth)+parseFloat(s.paddingLeft),right=box.right-parseFloat(s.borderRightWidth)-parseFloat(s.paddingRight);
+      const grouped=[];
+      for(const r of [...rects].sort((a,b)=>a.top-b.top)){const row=grouped.find(g=>Math.min(g.bottom,r.bottom)-Math.max(g.top,r.top)>Math.min(g.bottom-g.top,r.height)/2);if(row){row.left=Math.min(row.left,r.left);row.right=Math.max(row.right,r.right);row.top=Math.min(row.top,r.top);row.bottom=Math.max(row.bottom,r.bottom);}else grouped.push({left:r.left,right:r.right,top:r.top,bottom:r.bottom});}
+      return grouped.map(g=>({gapLeft:Math.round(g.left-left),gapRight:Math.round(right-g.right)}));
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    for(const row of rows)expect(Math.abs(row.gapLeft-row.gapRight),`row at ${width}px: ${JSON.stringify(row)}`).toBeLessThanOrEqual(2);
+  }
+  // on a narrow phone the dot wraps with sponsor me, never stranded at the end of a row
+  const dot=await page.locator('.mark-dot').boundingBox(),sponsor=await page.locator('.mark a[href*=sponsors]').boundingBox();
+  expect(Math.abs((dot.y+dot.height/2)-(sponsor.y+sponsor.height/2))).toBeLessThanOrEqual(2);
+});
 test('permission denial stays actionable',async({page})=>{await fakeMic(page,'reject');await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#status')).toContainText('not allowed');await expect(page.locator('#listen')).toHaveText('listen');expect(await page.evaluate(()=>probe.closes)).toBe(1);});
 test('stop and about release tracks',async({page})=>{await fakeMic(page);await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');await page.locator('#listen').click();expect(await page.evaluate(()=>probe.stops)).toBe(1);await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('stop listening');await page.locator('#nav-about').click();expect(await page.evaluate(()=>probe.stops)).toBe(2);});
 test('late permission result is disposed after leaving tuner',async({page})=>{await fakeMic(page,'defer');await page.goto('/');await page.locator('#listen').click();await expect(page.locator('#listen')).toHaveText('cancel');await page.locator('#nav-about').click();await page.evaluate(()=>resolveMic());await expect.poll(()=>page.evaluate(()=>probe.stops)).toBe(1);await page.locator('#nav-about').click();await expect(page.locator('#listen')).toHaveText('listen');});
